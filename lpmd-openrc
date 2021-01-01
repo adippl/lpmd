@@ -1,0 +1,17 @@
+#!/sbin/openrc-run
+
+name="lpmd daemon"
+description="small linux power management daemon"
+command="/usr/local/bin/lpmd"
+command_args=""
+
+start(){
+	ebegin "Starting lpmd"
+	start-stop-daemon --start --exec $command --name lpmd --make-pidfile --pidfile /run/lpmd.pid --background --stderr-logger "/usr/bin/logger --tag lpmd"
+	}
+
+stop(){
+	ebegin "Starting lpmd"
+	start-stop-daemon --stop --name lpmd
+	}
+

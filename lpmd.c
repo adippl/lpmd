@@ -46,8 +46,8 @@ int bat1HasThresholds=0;
 
 float bat0charge=0.0;
 float bat1charge=0.0;
-//float bat0chargeDelta=0.0;
-//float bat1chargeDelta=0.0;
+/* float bat0chargeDelta=0.0; */
+/* float bat1chargeDelta=0.0; */
 
 int chargerState=-1;
 
@@ -92,10 +92,10 @@ checkDir(const char* path){
 		closedir(dir);
 		return(1);}
 	else if(ENOENT==errno){
-		printf("dir %s does not exist\n", path);
+		perror(path);
 		return(0);}
 	else{
-		printf("opendir failed to open %s\n", path);
+		perror(path);
 		return(0);}}
 
 char*
@@ -103,7 +103,6 @@ readFileToStr(const char* path){
 	char* buffer=NULL;
 	size_t len;
 	FILE* file=fopen(path, "rb");
-	perror(path);
 	
 	if(file){
 		fseek(file, 0, SEEK_END);
@@ -115,6 +114,8 @@ readFileToStr(const char* path){
 			if(!s)
 				fprintf(stderr, "ERR fread returned %ld\n", s);}
 		fclose(file);}
+	else{
+		perror(path);}
 	if(buffer){
 		return(buffer);}
 	else{
@@ -137,18 +138,20 @@ fileToint(const char* path){
 void
 intToFile(const char* path, int i){
 	FILE* f=fopen(path, "w");
-	perror(path);
 	if(f){
 		fprintf(f, "%d", i);
-		fclose(f);}}
+		fclose(f);}
+	else{
+		perror(path);}}
 
 void
 strToFile(const char* path, char* str){
 	FILE* f=fopen(path, "w");
-	perror(path);
 	if(f){
 		fputs(str, f);
-		fclose(f);}}
+		fclose(f);}
+	else{
+		perror(path);}}
 
 void
 checkSysDirs(){
@@ -217,9 +220,9 @@ void
 chargerChangedState(){
 	changeGovernor();
 	if(chargerState){
-		printf("Charger connected\n");}
+		fprintf(stderr, "Charger connected\n");}
 	else{
-		printf("Charger disconnected\n");}}
+		fprintf(stderr, "Charger disconnected\n");}}
 
 void
 updateChargerState(){
@@ -231,18 +234,19 @@ updateChargerState(){
 void
 suspend(){
 	#ifdef DEBUG
-		printf("\nTHIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
+		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
 		return;}
 		#endif
 	#ifndef DEBUG
 		#ifndef NOLOGGER
-			printf("Battery power low, suspending system to mem in %d seconds.\n", suspendDeley);
+			fprintf(stderr, "Battery power low, suspending system to mem in %d seconds.\n", suspendDeley);
 			#endif
 		FILE* f=fopen(powerState, "w");
-		perror(powerState);
 		if(f){
 			fprintf(f, "mem");
-			fclose(f);}}
+			fclose(f);}
+		else{
+			perror(powerState);}}
 		#endif
 
 void
@@ -269,6 +273,7 @@ loop(){
 
 int
 main(){
+	fprintf(stderr, "Lpmd starts\n");
 	checkSysDirs();
 	setThresholds();
 	loop();

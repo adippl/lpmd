@@ -11,8 +11,12 @@ main features
 system. It should work on your system as long as paths to /sys filesystem looks
 the same on your system. No guarantees.
 
+>compilers?
+testsed on gcc-9.3.0 and tcc 0.9.27
+lpmd can be used with tcc -run option
+
 >Is this a shell script?
-yes it is
+Yes
 
 
 inspiration: OpenBSD'd apmd
