@@ -27,20 +27,21 @@
 const char* powerDir="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
 const char* bat1Dir="/sys/class/power_supply/BAT1";
-const char* bat0TrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
-const char* bat0TrStop="/sys/class/power_supply/BAT0/charge_start_threshold";
-const char* bat1TrStrt="/sys/class/power_supply/BAT1/charge_start_threshold";
-const char* bat1TrStop="/sys/class/power_supply/BAT1/charge_start_threshold";
+const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
+const char* bat0ThrStop="/sys/class/power_supply/BAT0/charge_start_threshold";
+const char* bat1ThrStrt="/sys/class/power_supply/BAT1/charge_start_threshold";
+const char* bat1ThrStop="/sys/class/power_supply/BAT1/charge_start_threshold";
 const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full";
 const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full";
 const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
 const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
 const char* chargerStatePath="/sys/class/power_supply/AC/online";
 const char* powerState="/sys/power/state";
+const char* pttyDir="/dev/pts/";
 
 int powerStateExists=1;
-int bat0Exists=0;
-int bat1Exists=0;
+int bat0Exists=-1;
+int bat1Exists=-1;
 int bat0HasThresholds=0;
 int bat1HasThresholds=0;
 
@@ -48,35 +49,26 @@ float bat0charge=0.0;
 float bat1charge=0.0;
 /* float bat0chargeDelta=0.0; */
 /* float bat1chargeDelta=0.0; */
-
 int chargerState=-1;
 
 /* config section */
-const int bat0TrStrtVal=45;
-const int bat0TrStopVal=75;
-const int bat1TrStrtVal=45;
-const int bat1TrStopVal=75;
-
+const int bat0ThrStrtVal=45;
+const int bat0ThrStopVal=75;
+const int bat1ThrStrtVal=45;
+const int bat1ThrStopVal=75;
 const float batMinSleepThreshold=0.15f;
-
+const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
-
 const int manageGovernors=1;
 const int numberOfCores=4;
 const char* powersaveGovernor="powersave";
 const char* performanceGovernor="performance";
-
-const int syncBeforeSuspend=0;
-const int suspendDeley=5;
+const int syncBeforeSuspend=1;
+const int suspendDeley=15;
+const int wallNotify=1;
+const char* wallSuspendWarning="WARNING!!!\n WARNING!!!  battery0 is low.\n WARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
+const char* wallLowBatWarning="WARNING!!!\n WARNING!!!  battery0 is below 25%\n";
 /* end of config */
-
-/*
-void
-scat(char *buf, const char* str1, const char* str2){
-	memset(buf,0,SSTR);
-	strncpy(buf, str1, SSTR);
-	strncat(buf, str2, SSTR);}
-*/
 
 int
 checkFile(const char* path){
@@ -92,7 +84,7 @@ checkDir(const char* path){
 		closedir(dir);
 		return(1);}
 	else if(ENOENT==errno){
-		perror(path);
+		//perror(path);
 		return(0);}
 	else{
 		perror(path);
@@ -155,24 +147,28 @@ strToFile(const char* path, char* str){
 
 void
 checkSysDirs(){
-	if(!checkDir(powerDir))
-		exit(1);
-	if(checkDir(bat0Dir)){
-		bat0Exists=1;
-		if(checkFile(bat0TrStrt) &&  checkFile(bat0TrStop)){
-			bat0HasThresholds=1;}}
-	else{
-		bat0Exists=0;
-		bat0HasThresholds=0;}
-	if(checkDir(bat1Dir)){
-		bat1Exists=1;
-		if(checkFile(bat1TrStrt) &&  checkFile(bat1TrStop)){
-			bat1HasThresholds=1;}}
-	else{
-		bat1Exists=0;
-		bat1HasThresholds=1;}
-	if(checkFile(powerState)){
-		powerStateExists=0;}}
+	int i=checkDir(bat0Dir);
+	if(i!=bat0Exists){
+		if(i){
+			bat0Exists=1;
+			fprintf(stderr, "BAT0 Detected\n");
+			if(checkFile(bat0ThrStrt) &&  checkFile(bat0ThrStop)){
+				bat0HasThresholds=1;}}
+		else{
+			bat0Exists=0;
+			bat0HasThresholds=0;
+			fprintf(stderr, "BAT0 Missing\n");}}
+	i=checkDir(bat1Dir);
+	if(i!=bat1Exists){
+		if(i){
+			bat1Exists=1;
+			fprintf(stderr, "BAT1 Detected\n");
+			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
+				bat1HasThresholds=1;}}
+		else{
+			bat1Exists=0;
+			bat1HasThresholds=0;
+			fprintf(stderr, "BAT1 Missing\n");}}}
 
 void
 updatePowerPerc(){
@@ -191,6 +187,7 @@ updatePowerPerc(){
 void
 changeGovernor(){
 	const char* gov=NULL;
+	char path[SSTR]={0};
 	if(manageGovernors){
 		switch(chargerState){
 			case 0:
@@ -202,19 +199,35 @@ changeGovernor(){
 			default:
 				fprintf(stderr,"ERR changeGovernor inconsistent chargerState\n");
 				return;}
-		char* path=calloc(SSTR, sizeof(char));
 		for(int i=0; i<numberOfCores; i++){
-			sprintf(path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
-			strToFile(path, (char*)gov);}
-		free(path);}}
-			
+			sprintf((char*)&path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
+			strToFile((char*)&path, (char*)gov);}}}
+
+void
+wall(const char* message){
+#ifndef NO_WALL_MESS
+	DIR* d = opendir("/dev/pts/");
+	struct dirent *dir;
+	char path[512]={0}; /* size is way to big because of a warning */
+	if(d){
+		while((dir = readdir(d)) != NULL){
+			if(*dir->d_name >= '0' && *dir->d_name <= '9'){
+				snprintf((char*)&path, 512, "%s%s", pttyDir, dir->d_name);
+				strToFile((char*)&path, (char*)message);}}}
+		closedir(d);}
+	#endif
+#ifdef NO_WALL_MESS
+	return;}
+	#endif
 
 void
 setThresholds(){
-	intToFile(bat0TrStrt, bat0TrStrtVal);
-	intToFile(bat0TrStop, bat0TrStopVal);
-	intToFile(bat1TrStrt, bat1TrStrtVal);
-	intToFile(bat1TrStop, bat1TrStopVal);}
+	if(bat0HasThresholds){
+		intToFile(bat0ThrStrt, bat0ThrStrtVal);
+		intToFile(bat0ThrStop, bat0ThrStopVal);}
+	if(bat1HasThresholds){
+		intToFile(bat1ThrStrt, bat1ThrStrtVal);
+		intToFile(bat1ThrStop, bat1ThrStopVal);}}
 
 void
 chargerChangedState(){
@@ -238,9 +251,10 @@ suspend(){
 		return;}
 		#endif
 	#ifndef DEBUG
-		#ifndef NOLOGGER
-			fprintf(stderr, "Battery power low, suspending system to mem in %d seconds.\n", suspendDeley);
-			#endif
+		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDeley);
+		wall(wallSuspendWarning);
+		if(syncBeforeSuspend)
+			sync();
 		FILE* f=fopen(powerState, "w");
 		if(f){
 			fprintf(f, "mem");
@@ -251,30 +265,35 @@ suspend(){
 
 void
 checkForLowPower(){
-	if(!chargerState && bat0charge < batMinSleepThreshold){
-		suspend();}}
-
-void
-loop(){
-	#ifdef DEBUG
-	for(int i=0; i<6; i++){
-	#endif
-	#ifndef DEBUG
-	for(;;){
-	#endif
-		updatePowerPerc();
-		updateChargerState();
-		checkForLowPower();
-		#ifdef DEBUG
-			printf("bat0 %f\n",bat0charge);
-			printf("bat1 %f\n",bat1charge);
-			#endif
-		sleep(loopInterval);}}
+	if(!chargerState){
+		if(bat0charge < batMinSleepThreshold){
+			suspend();
+			return;}}
+		if(bat0charge < batLowWarningThreshold){
+			wall(wallLowBatWarning);}}
 
 int
 main(){
+	if(!checkDir(powerDir))
+		exit(1);
+	if(checkFile(powerState)){
+		powerStateExists=0;}
 	fprintf(stderr, "Lpmd starts\n");
 	checkSysDirs();
 	setThresholds();
-	loop();
+
+	#ifdef DEBUG
+		for(int i=0; i<6; i++){
+		#endif
+	#ifndef DEBUG
+		for(;;){
+		#endif
+			checkSysDirs();
+			updatePowerPerc();
+			updateChargerState();
+			checkForLowPower();
+			#ifdef DEBUG
+				printf("bat0 %f bat1 %f\n",bat0charge, bat0charge);
+				#endif
+			sleep(loopInterval);}
 	return(0);}

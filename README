@@ -2,13 +2,18 @@ lpmd is a minimal power management daemon for linux
 main features
 	* support for 2 batteries (BAT0 BAT1)
 	* change of cpu governor on connect/disconnect of power adapter
-	* setting of battery charging tresholds at the start
+	* setting of battery charging thresholds at the start
+	* warnings when running low on battery power and not charging
 	* suspending system when running low on battery power and not charging
-	* basic configuration in constant variables (search for "config section"
+	* basic configuration in const variables (search for "config section"
+	* wall style message to all pseudo TTYs (not to /dev/tty*)
+	* openrc initscript with logger started by start-stop-daemon
+	* basic ebuild installing lpmd from git
+	* <300 lines of code. You can (probably) easily understand it.
 
 >supported distros and machines?
 	I created it for my thinkpad x270 running gentoo. It's mostly hardcoded for my
-system. It should work on your system as long as paths to /sys filesystem looks
+system. It should work on your system as long as paths to /sys filesystem look
 the same on your system. No guarantees.
 
 >compilers?
@@ -18,5 +23,4 @@ lpmd can be used with tcc -run option
 >Is this a shell script?
 Yes
 
-
-inspiration: OpenBSD'd apmd
+inspiration: OpenBSD's apmd
