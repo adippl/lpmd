@@ -1,4 +1,4 @@
-/*  lpm simple linux power management daemon
+/*  lpmd simple linux power management daemon
  *  Copyright (C) 2020 Adam Prycki (email: adam.prycki@gmail.com)
  *
  *  This program is free software; you can redistribute it and/or modify
@@ -101,20 +101,20 @@ checkDir(const char* path){
 char*
 readFileToStr(const char* path){
 	char* buffer=NULL;
-	long length;
-	FILE* f=fopen(path, "rb");
+	size_t len;
+	FILE* file=fopen(path, "rb");
 	perror(path);
 	
-	if(f){
-		fseek(f, 0, SEEK_END);
-		length=ftell(f);
-		fseek(f, 0, SEEK_SET);
-		buffer=malloc(length);
+	if(file){
+		fseek(file, 0, SEEK_END);
+		len=ftell(file);
+		fseek(file, 0, SEEK_SET);
+		buffer=malloc(len);
 		if(buffer){
-			size_t s=fread(buffer, 1, length, f);
+			size_t s=fread(buffer, 1, len, file);
 			if(!s)
 				fprintf(stderr, "ERR fread returned %ld\n", s);}
-		fclose(f);}
+		fclose(file);}
 	if(buffer){
 		return(buffer);}
 	else{
