@@ -22,6 +22,10 @@ const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
 
 const char* chargerStatePath="/sys/class/power_supply/AC/online";
 
+const char* powerState="/sys/power/state";
+
+int powerStateExists=1;
+
 int bat0Exists=1;
 int bat1Exists=1;
 int bat0HasThresholds=0;
@@ -29,14 +33,26 @@ int bat1HasThresholds=0;
 
 float bat0charge=0.0;
 float bat1charge=0.0;
+//float bat0chargeDelta=0.0;
+//float bat1chargeDelta=0.0;
 
-int chargerState=0;
+int chargerState=-1;
 
 /* config */
 const int bat0TrStrtVal=45;
 const int bat0TrStopVal=75;
 const int bat1TrStrtVal=45;
 const int bat1TrStopVal=75;
+
+const float batMinSleepThreshold=0.15f;
+
+const int loopInterval=1;
+
+const int manageGovernors=1;
+const int numberOfCores=4;
+const char* powersaveGovernor="powersave";
+const char* performanceGovernor="performance";
+/* end of config */
 
 
 /*
@@ -79,12 +95,15 @@ readFileToStr(const char* path){
 		fseek(f, 0, SEEK_SET);
 		buffer=malloc(length);
 		if(buffer){
-			fread (buffer, 1, length, f);}
+			size_t s=fread(buffer, 1, length, f);
+			if(!s)
+				fprintf(stderr, "ERR fread returned %ld\n", s);}
 		fclose(f);}
 	if(buffer){
 		return(buffer);}
 	else{
-		free(buffer);}}
+		free(buffer);
+		return(NULL);}}
 
 int
 fileToint(const char* path){
@@ -105,10 +124,15 @@ intToFile(const char* path, int i){
 		fprintf(f, "%d", i);
 		fclose(f);}}
 
+void
+strToFile(const char* path, char* str){
+	FILE* f=fopen(path, "w");
+	if(f){
+		fputs(str, f);
+		fclose(f);}}
 
 void
 checkSysDirs(){
-	char* buffer=calloc(SSTR, sizeof(char));
 	if(checkDir(powerDir))exit(1);
 	if(checkDir(bat0Dir)){
 		exit(1);
@@ -121,15 +145,13 @@ checkSysDirs(){
 		if(checkFile(bat1TrStrt) &&  checkFile(bat1TrStop)){
 			bat1HasThresholds=1;}
 			}
-	
-	free(buffer);
-	}
+	if(checkFile(powerState)){
+		powerStateExists=0;}}
 
 void
 updatePowerPerc(){
 	int a=0;
 	int b=0;
-
 	if(bat0Exists){
 		a=fileToint(bat0EnNow);
 		b=fileToint(bat0EnFull);
@@ -141,6 +163,26 @@ updatePowerPerc(){
 		bat1charge=(float)a/b;}}
 
 void
+changeGovernor(){
+	const char* gov=NULL;
+	if(manageGovernors){
+		switch(chargerState){
+			case 0:
+				gov=powersaveGovernor;
+				break;
+			case 1:
+				gov=performanceGovernor;
+				break;
+			default:
+				fprintf(stderr,"ERR changeGovernor inconsistent chargerState\n");
+				return;}
+		char* path=calloc(SSTR, sizeof(char));
+		for(int i=0; i<numberOfCores; i++){
+			sprintf(path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
+			strToFile(path, (char*)gov);}}}
+			
+
+void
 setThresholds(){
 	intToFile(bat0TrStrt, bat0TrStrtVal);
 	intToFile(bat0TrStop, bat0TrStopVal);
@@ -148,29 +190,50 @@ setThresholds(){
 	intToFile(bat1TrStop, bat1TrStopVal);}
 
 void
+chargerChangedState(){
+	changeGovernor();
+	if(chargerState){
+		printf("Charger connected\n");}
+	else{
+		printf("Charger disconnected\n");}}
+
+void
 updateChargerState(){
 	int c=fileToint(chargerStatePath);
 	if(c != chargerState){
 		chargerState=c;
-		chargerChangedState();}
-		
-	}
+		chargerChangedState();}}
 
 void
-chargerChangedState(){
-	if(chargerState){
-		printf("Charger connected\n");}
-	else
-		printf("Charger disconnected\n");}}
+suspend(){
+	#ifdef DEBUG
+		printf("\nTHIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
+		return;}
+		#endif
+	#ifndef DEBUG
+		printf("Battery power low, suspending system to mem.\n");
+		FILE* f=fopen(powerState, "w");
+		if(f){
+			fprintf(f, "mem");
+			fclose(f);}}
+		#endif
+
+void
+checkForLowPower(){
+	if(!chargerState && bat0charge < batMinSleepThreshold){
+		suspend();}}
 
 void
 loop(){
 	for(int i=0; i<6; i++){
 		updatePowerPerc();
-		printf("bat0 %f\n",bat0charge);
-		printf("bat1 %f\n",bat1charge);
-		sleep(1);}}
-
+		updateChargerState();
+		checkForLowPower();
+		#ifdef DEBUG
+			printf("bat0 %f\n",bat0charge);
+			printf("bat1 %f\n",bat1charge);
+			#endif
+		sleep(loopInterval);}}
 
 int
 main(){
