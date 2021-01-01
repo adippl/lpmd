@@ -7,7 +7,7 @@ debug:
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c -o lpmd
 clean:
 	rm -f lpmd
-install: rpmd
+install: lpmd
 	cp lpmd /usr/local/bin/lpmd 
 	cp lpmd-openrc /etc/init.d/lpmd 
 	chmod +x /usr/local/bin/lpmd /etc/init.d/lpmd'
