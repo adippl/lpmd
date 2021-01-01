@@ -16,3 +16,14 @@ DEPEND=""
 RDEPEND="${DEPEND}"
 BDEPEND=""
 
+src_install() {
+	#cp ${S}/lpmd ${D}/usr/bin/lpmd
+	#cp ${S}/lpmd-openrc ${D}/etc/init.d/
+	mkdir -p ${D}/usr/bin/
+	mkdir -p ${D}/etc/init.d/
+	cp ${S}/lpmd ${D}/usr/bin/lpmd
+	cp ${S}/lpmd-openrc ${D}/etc/init.d/lpmd
+	chmod +x ${D}/usr/bin/lpmd ${D}/etc/init.d/lpmd
+
+}
+

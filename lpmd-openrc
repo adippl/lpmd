@@ -2,7 +2,7 @@
 
 name="lpmd daemon"
 description="small linux power management daemon"
-command="/usr/local/bin/lpmd"
+command="/usr/bin/lpmd"
 command_args=""
 
 start(){

@@ -8,10 +8,8 @@ debug:
 clean:
 	rm -f lpmd
 install: lpmd
-	cp lpmd /usr/local/bin/lpmd 
-	cp lpmd-openrc /etc/init.d/lpmd 
-	chmod +x /usr/local/bin/lpmd /etc/init.d/lpmd'
+	su root -c 'cp lpmd /usr/bin/lpmd && cp lpmd-openrc /etc/init.d/lpmd && chmod +x /usr/bin/lpmd /etc/init.d/lpmd'
 uninstall:
-	rm -f /usr/local/bin/lpmd /etc/init.d/lmpd'
+	su root -c 'rm -f /usr/bin/lpmd /etc/init.d/lmpd'
 
 
