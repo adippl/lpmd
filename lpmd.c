@@ -202,7 +202,8 @@ changeGovernor(){
 		char* path=calloc(SSTR, sizeof(char));
 		for(int i=0; i<numberOfCores; i++){
 			sprintf(path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
-			strToFile(path, (char*)gov);}}}
+			strToFile(path, (char*)gov);}
+		free(path);}}
 			
 
 void
