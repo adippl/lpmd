@@ -50,6 +50,7 @@ float bat1charge=0.0;
 /* float bat0chargeDelta=0.0; */
 /* float bat1chargeDelta=0.0; */
 int chargerState=-1;
+int lowBatWarning_warned=0;
 
 /* config section */
 const int bat0ThrStrtVal=45;
@@ -64,7 +65,7 @@ const int numberOfCores=4;
 const char* powersaveGovernor="powersave";
 const char* performanceGovernor="performance";
 const int syncBeforeSuspend=1;
-const int suspendDeley=15;
+const int suspendDeley=60;
 const int wallNotify=1;
 const char* wallSuspendWarning="WARNING!!!\n WARNING!!!  battery0 is low.\n WARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
 const char* wallLowBatWarning="WARNING!!!\n WARNING!!!  battery0 is below 25%\n";
@@ -90,42 +91,16 @@ checkDir(const char* path){
 		perror(path);
 		return(0);}}
 
-char*
-readFileToStr(const char* path){
-	char* buffer=NULL;
-	size_t len;
-	FILE* file=fopen(path, "rb");
-	
-	if(file){
-		fseek(file, 0, SEEK_END);
-		len=ftell(file);
-		fseek(file, 0, SEEK_SET);
-		buffer=malloc(len);
-		if(buffer){
-			size_t s=fread(buffer, 1, len, file);
-			if(!s)
-				fprintf(stderr, "ERR fread returned %ld\n", s);}
-		fclose(file);}
-	else{
-		perror(path);}
-	if(buffer){
-		return(buffer);}
-	else{
-		free(buffer);
-		return(NULL);}}
-
 int
 fileToint(const char* path){
 	int i=0;
-	char* str=readFileToStr(path);
-	
-	if(!str){
-		i=0;
-		return(-1);}
-	i=atoi(str);
-	
-	free(str);
-	return(i);}
+	FILE* file=fopen(path, "r");
+	if(file){
+		if(fscanf(file, "%d", &i)==1)
+			return(i);
+		else
+			return(-1);}
+	return(-1);}
 
 void
 intToFile(const char* path, int i){
@@ -233,7 +208,8 @@ void
 chargerChangedState(){
 	changeGovernor();
 	if(chargerState){
-		fprintf(stderr, "Charger connected\n");}
+		fprintf(stderr, "Charger connected\n");
+		lowBatWarning_warned=0;}
 	else{
 		fprintf(stderr, "Charger disconnected\n");}}
 
@@ -269,7 +245,7 @@ checkForLowPower(){
 		if(bat0charge < batMinSleepThreshold){
 			suspend();
 			return;}}
-		if(bat0charge < batLowWarningThreshold){
+		if(bat0charge < batLowWarningThreshold && !lowBatWarning_warned){
 			wall(wallLowBatWarning);}}
 
 int
