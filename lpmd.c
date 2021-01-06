@@ -35,7 +35,7 @@ const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full";
 const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full";
 const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
 const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
-const char* chargerStatePath="/sys/class/power_supply/AC/online";
+const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
 
@@ -49,7 +49,7 @@ float bat0charge=0.0;
 float bat1charge=0.0;
 /* float bat0chargeDelta=0.0; */
 /* float bat1chargeDelta=0.0; */
-int chargerState=-1;
+int chargerConnected=-1;
 int lowBatWarning_warned=0;
 
 /* config section */
@@ -96,10 +96,12 @@ fileToint(const char* path){
 	int i=0;
 	FILE* file=fopen(path, "r");
 	if(file){
-		if(fscanf(file, "%d", &i)==1)
-			return(i);
-		else
-			return(-1);}
+		if(fscanf(file, "%d", &i)==1){
+			fclose(file);
+			return(i);}
+		else{
+			fclose(file);
+			return(-1);}}
 	return(-1);}
 
 void
@@ -164,7 +166,7 @@ changeGovernor(){
 	const char* gov=NULL;
 	char path[SSTR]={0};
 	if(manageGovernors){
-		switch(chargerState){
+		switch(chargerConnected){
 			case 0:
 				gov=powersaveGovernor;
 				break;
@@ -172,7 +174,7 @@ changeGovernor(){
 				gov=performanceGovernor;
 				break;
 			default:
-				fprintf(stderr,"ERR changeGovernor inconsistent chargerState\n");
+				fprintf(stderr,"ERR changeGovernor inconsistent chargerConnected\n");
 				return;}
 		for(int i=0; i<numberOfCores; i++){
 			sprintf((char*)&path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
@@ -207,17 +209,18 @@ setThresholds(){
 void
 chargerChangedState(){
 	changeGovernor();
-	if(chargerState){
+	if(chargerConnected){
 		fprintf(stderr, "Charger connected\n");
-		lowBatWarning_warned=0;}
+		}
 	else{
-		fprintf(stderr, "Charger disconnected\n");}}
+		fprintf(stderr, "Charger disconnected\n");
+		lowBatWarning_warned=0;}}
 
 void
 updateChargerState(){
-	int c=fileToint(chargerStatePath);
-	if(c != chargerState){
-		chargerState=c;
+	int c=fileToint(chargerConnectedPath);
+	if(c != chargerConnected){
+		chargerConnected=c;
 		chargerChangedState();}}
 
 void
@@ -241,12 +244,13 @@ suspend(){
 
 void
 checkForLowPower(){
-	if(!chargerState){
+	if(!chargerConnected){
 		if(bat0charge < batMinSleepThreshold){
 			suspend();
 			return;}}
-		if(bat0charge < batLowWarningThreshold && !lowBatWarning_warned){
-			wall(wallLowBatWarning);}}
+		if(bat0charge < batLowWarningThreshold && !lowBatWarning_warned ){
+			wall(wallLowBatWarning);
+			lowBatWarning_warned=1;}}
 
 int
 main(){
@@ -257,7 +261,7 @@ main(){
 	fprintf(stderr, "Lpmd starts\n");
 	checkSysDirs();
 	setThresholds();
-
+	chargerConnected=fileToint(chargerConnectedPath);
 	#ifdef DEBUG
 		for(int i=0; i<6; i++){
 		#endif
