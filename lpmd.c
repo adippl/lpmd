@@ -38,6 +38,7 @@ const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
 const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
+const char* cpupresetPath="/sys/devices/system/cpu/present";
 
 int powerStateExists=1;
 int bat0Exists=-1;
@@ -51,6 +52,7 @@ float bat1charge=0.0;
 /* float bat1chargeDelta=0.0; */
 int chargerConnected=-1;
 int lowBatWarning_warned=0;
+int numberOfCores=4;
 
 /* config section */
 const int bat0ThrStrtVal=45;
@@ -61,7 +63,6 @@ const float batMinSleepThreshold=0.15f;
 const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
 const int manageGovernors=1;
-const int numberOfCores=4;
 const char* powersaveGovernor="powersave";
 const char* performanceGovernor="performance";
 const int syncBeforeSuspend=1;
@@ -123,7 +124,23 @@ strToFile(const char* path, char* str){
 		perror(path);}}
 
 void
+detectNumberOfCpus(){
+	FILE* f=fopen(cpupresetPath, "r");
+	int ec=0;
+	if(f){
+		/* discards first variable */
+		ec=fscanf(f, "%d-%d", &numberOfCores, &numberOfCores);
+		if(ec!=2)
+			fprintf(stderr, "cpu detect had problem parsing\n");
+		numberOfCores++;
+		fprintf(stderr, "Found %d core cpu\n", numberOfCores);
+		fclose(f);}
+	else
+		perror(cpupresetPath);}
+
+void
 checkSysDirs(){
+	
 	int i=checkDir(bat0Dir);
 	if(i!=bat0Exists){
 		if(i){
@@ -259,6 +276,7 @@ main(){
 	if(checkFile(powerState)){
 		powerStateExists=0;}
 	fprintf(stderr, "Lpmd starts\n");
+	detectNumberOfCpus();
 	checkSysDirs();
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
