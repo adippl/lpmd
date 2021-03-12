@@ -21,6 +21,7 @@
 #include <errno.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <fcntl.h>
 
 #define SSTR 64
 
@@ -28,9 +29,9 @@ const char* powerDir="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
 const char* bat1Dir="/sys/class/power_supply/BAT1";
 const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
-const char* bat0ThrStop="/sys/class/power_supply/BAT0/charge_start_threshold";
+const char* bat0ThrStop="/sys/class/power_supply/BAT0/charge_stop_threshold";
 const char* bat1ThrStrt="/sys/class/power_supply/BAT1/charge_start_threshold";
-const char* bat1ThrStop="/sys/class/power_supply/BAT1/charge_start_threshold";
+const char* bat1ThrStop="/sys/class/power_supply/BAT1/charge_stop_threshold";
 const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full";
 const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full";
 const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
@@ -104,6 +105,7 @@ fileToint(const char* path){
 			fclose(file);
 			return(-1);}}
 	return(-1);}
+
 
 void
 intToFile(const char* path, int i){
@@ -216,6 +218,7 @@ wall(const char* message){
 
 void
 setThresholds(){
+	fprintf(stderr, "Setting charge thresholds\n");
 	if(bat0HasThresholds){
 		intToFile(bat0ThrStrt, bat0ThrStrtVal);
 		intToFile(bat0ThrStop, bat0ThrStopVal);}
