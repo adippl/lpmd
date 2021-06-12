@@ -25,6 +25,10 @@
 
 #define SSTR 64
 
+#ifndef DEBUG_CYCLES
+#define DEBUG_CYCLES 360
+#endif
+
 const char* powerDir="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
 const char* bat1Dir="/sys/class/power_supply/BAT1";
@@ -142,7 +146,6 @@ detectNumberOfCpus(){
 
 void
 checkSysDirs(){
-	
 	int i=checkDir(bat0Dir);
 	if(i!=bat0Exists){
 		if(i){
@@ -203,18 +206,18 @@ void
 wall(const char* message){
 #ifndef NO_WALL_MESS
 	DIR* d = opendir("/dev/pts/");
-	struct dirent *dir;
+	struct dirent *dirent;
 	char path[512]={0}; /* size is way to big because of a warning */
 	if(d){
-		while((dir = readdir(d)) != NULL){
-			if(*dir->d_name >= '0' && *dir->d_name <= '9'){
-				snprintf((char*)&path, 512, "%s%s", pttyDir, dir->d_name);
+		while((dirent = readdir(d)) != NULL){
+			if(*dirent->d_name >= '0' && *dirent->d_name <= '9'){
+				snprintf((char*)&path, 512, "%s%s", pttyDir, dirent->d_name);
 				strToFile((char*)&path, (char*)message);}}}
 		closedir(d);}
-	#endif
+#endif
 #ifdef NO_WALL_MESS
 	return;}
-	#endif
+#endif
 
 void
 setThresholds(){
@@ -230,8 +233,7 @@ void
 chargerChangedState(){
 	changeGovernor();
 	if(chargerConnected){
-		fprintf(stderr, "Charger connected\n");
-		}
+		fprintf(stderr, "Charger connected\n");}
 	else{
 		fprintf(stderr, "Charger disconnected\n");
 		lowBatWarning_warned=0;}}
@@ -264,11 +266,20 @@ suspend(){
 
 void
 checkForLowPower(){
+	int bat0low=bat0charge<batMinSleepThreshold;
+	int bat1low=bat1charge<batMinSleepThreshold;
+	int bat0lowWarn=bat0charge<batLowWarningThreshold;
+	int bat1lowWarn=bat1charge<batLowWarningThreshold;
 	if(!chargerConnected){
-		if(bat0charge < batMinSleepThreshold){
+		if( (bat0Exists&&bat0low)||\
+			(bat1Exists&&bat0low&&bat1low)){
+			
 			suspend();
 			return;}}
-		if(bat0charge < batLowWarningThreshold && !lowBatWarning_warned ){
+		if(((bat0Exists&&bat0lowWarn)||\
+			(bat1Exists&&bat0lowWarn&&bat1lowWarn))&& \
+			!lowBatWarning_warned){
+			
 			wall(wallLowBatWarning);
 			lowBatWarning_warned=1;}}
 
@@ -283,18 +294,17 @@ main(){
 	checkSysDirs();
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
-	#ifdef DEBUG
-		for(int i=0; i<6; i++){
-		#endif
-	#ifndef DEBUG
+#ifdef DEBUG
+		for(int i=0; i<DEBUG_CYCLES; i++){
+#else
 		for(;;){
-		#endif
+#endif
 			checkSysDirs();
 			updatePowerPerc();
 			updateChargerState();
 			checkForLowPower();
-			#ifdef DEBUG
-				printf("bat0 %f bat1 %f\n",bat0charge, bat0charge);
-				#endif
+#ifdef DEBUG_PRINT
+			printf("bat0 %f bat1 %f\n",bat0charge, bat0charge);
+#endif
 			sleep(loopInterval);}
 	return(0);}
