@@ -50,6 +50,8 @@ int bat0Exists=-1;
 int bat1Exists=-1;
 int bat0HasThresholds=0;
 int bat1HasThresholds=0;
+int bat0maxCharge=0;
+int bat1maxCharge=0;
 
 float bat0charge=0.0;
 float bat1charge=0.0;
@@ -71,7 +73,7 @@ const int manageGovernors=1;
 const char* powersaveGovernor="powersave";
 const char* performanceGovernor="performance";
 const int syncBeforeSuspend=1;
-const int suspendDeley=60;
+const int suspendDelay=60;
 const int wallNotify=1;
 const char* wallSuspendWarning="WARNING!!!\n WARNING!!!  battery0 is low.\n WARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
 const char* wallLowBatWarning="WARNING!!!\n WARNING!!!  battery0 is below 25%\n";
@@ -151,16 +153,19 @@ checkSysDirs(){
 		if(i){
 			bat0Exists=1;
 			fprintf(stderr, "BAT0 Detected\n");
-			if(checkFile(bat0ThrStrt) &&  checkFile(bat0ThrStop)){
+			bat0maxCharge=fileToint(bat0EnFull);
+			if(checkFile(bat0ThrStrt) && checkFile(bat0ThrStop)){
 				bat0HasThresholds=1;}}
 		else{
 			bat0Exists=0;
 			bat0HasThresholds=0;
 			fprintf(stderr, "BAT0 Missing\n");}}
+	
 	i=checkDir(bat1Dir);
 	if(i!=bat1Exists){
 		if(i){
 			bat1Exists=1;
+			bat1maxCharge=fileToint(bat1EnFull);
 			fprintf(stderr, "BAT1 Detected\n");
 			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
@@ -172,16 +177,12 @@ checkSysDirs(){
 void
 updatePowerPerc(){
 	int a=0;
-	int b=0;
 	if(bat0Exists){
 		a=fileToint(bat0EnNow);
-		b=fileToint(bat0EnFull);
-		bat0charge=(float)a/b;}
-	
+		bat0charge=(float)a/bat0maxCharge;}
 	if(bat1Exists){
 		a=fileToint(bat1EnNow);
-		b=fileToint(bat1EnFull);
-		bat1charge=(float)a/b;}}
+		bat1charge=(float)a/bat0maxCharge;}}
 
 void
 changeGovernor(){
@@ -252,7 +253,7 @@ suspend(){
 		return;}
 		#endif
 	#ifndef DEBUG
-		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDeley);
+		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDelay);
 		wall(wallSuspendWarning);
 		if(syncBeforeSuspend)
 			sync();
