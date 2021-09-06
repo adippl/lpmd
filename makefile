@@ -12,7 +12,7 @@ debug:
 clean:
 	rm -f lpmd lpmd-profiler gmon.out
 install: lpmd
-	mkdir -p ${DESTDIR}/bin
+	mkdir -p ${DESTDIR}/usr/bin
 	cp lpmd ${DESTDIR}/usr/bin/lpmd
 	mkdir -p ${DESTDIR}/etc/init.d
 	cp lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
