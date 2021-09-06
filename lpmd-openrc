@@ -11,7 +11,7 @@ start(){
 	}
 
 stop(){
-	ebegin "Starting lpmd"
+	ebegin "Stopping lpmd"
 	start-stop-daemon --stop --name lpmd
 	}
 

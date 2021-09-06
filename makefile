@@ -12,9 +12,11 @@ debug:
 clean:
 	rm -f lpmd lpmd-profiler gmon.out
 install: lpmd
-	cp lpmd ${DESTDIR}/bin/lpmd 
+	mkdir -p ${DESTDIR}/bin
+	cp lpmd ${DESTDIR}/usr/bin/lpmd
+	mkdir -p ${DESTDIR}/etc/init.d
 	cp lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
-	chmod +x ${DESTDIR}/bin/lpmd ${DESTDIR}/etc/init.d/lpmd
+	chmod +x ${DESTDIR}/usr/bin/lpmd ${DESTDIR}/etc/init.d/lpmd
 uninstall:
 	rm -f $(PREFIX)/bin/lpmd /etc/init.d/lmpd
 
