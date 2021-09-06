@@ -26,8 +26,29 @@
 #define SSTR 64
 
 #ifndef DEBUG_CYCLES
-#define DEBUG_CYCLES 360
+	#define DEBUG_CYCLES 360
 #endif
+
+/* config section */
+#ifndef ENERGY_FULL
+	#define ENERGY_FULL
+#endif
+const int bat0ThrStrtVal=45;
+const int bat0ThrStopVal=75;
+const int bat1ThrStrtVal=45;
+const int bat1ThrStopVal=75;
+const float batMinSleepThreshold=0.15f;
+const float batLowWarningThreshold=0.25f;
+const int loopInterval=1;
+const int manageGovernors=1;
+const char* powersaveGovernor="powersave";
+const char* performanceGovernor="performance";
+const int syncBeforeSuspend=1;
+const int suspendDelay=60;
+const int wallNotify=1;
+const char* wallSuspendWarning="WARNING!!!\nWARNING!!!  battery0 is low.\nWARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
+const char* wallLowBatWarning="WARNING!!!\nWARNING!!!  battery0 is below 25%\n";
+/* end of config */
 
 const char* powerDir="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
@@ -36,8 +57,13 @@ const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
 const char* bat0ThrStop="/sys/class/power_supply/BAT0/charge_stop_threshold";
 const char* bat1ThrStrt="/sys/class/power_supply/BAT1/charge_start_threshold";
 const char* bat1ThrStop="/sys/class/power_supply/BAT1/charge_stop_threshold";
+#ifndef ENERGY_FULL_DESIGN
 const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full";
 const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full";
+#else
+const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full_design";
+const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full_design";
+#endif
 const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
 const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
 const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
@@ -60,24 +86,6 @@ float bat1charge=0.0;
 int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
-
-/* config section */
-const int bat0ThrStrtVal=45;
-const int bat0ThrStopVal=75;
-const int bat1ThrStrtVal=45;
-const int bat1ThrStopVal=75;
-const float batMinSleepThreshold=0.15f;
-const float batLowWarningThreshold=0.25f;
-const int loopInterval=1;
-const int manageGovernors=1;
-const char* powersaveGovernor="powersave";
-const char* performanceGovernor="performance";
-const int syncBeforeSuspend=1;
-const int suspendDelay=60;
-const int wallNotify=1;
-const char* wallSuspendWarning="WARNING!!!\n WARNING!!!  battery0 is low.\n WARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
-const char* wallLowBatWarning="WARNING!!!\n WARNING!!!  battery0 is below 25%\n";
-/* end of config */
 
 int
 checkFile(const char* path){
@@ -248,11 +256,11 @@ updateChargerState(){
 
 void
 suspend(){
-	#ifdef DEBUG
+#ifdef DEBUG
 		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
 		return;}
-		#endif
-	#ifndef DEBUG
+#endif
+#ifndef DEBUG
 		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDelay);
 		wall(wallSuspendWarning);
 		if(syncBeforeSuspend)
@@ -263,7 +271,7 @@ suspend(){
 			fclose(f);}
 		else{
 			perror(powerState);}}
-		#endif
+#endif
 
 void
 checkForLowPower(){
@@ -272,13 +280,12 @@ checkForLowPower(){
 	int bat0lowWarn=bat0charge<batLowWarningThreshold;
 	int bat1lowWarn=bat1charge<batLowWarningThreshold;
 	if(!chargerConnected){
-		if( (bat0Exists&&bat0low)||\
-			(bat1Exists&&bat0low&&bat1low)){
+		if( (bat0Exists&&bat0low)||(bat1Exists&&bat0low&&bat1low)){
 			
 			suspend();
 			return;}}
 		if(((bat0Exists&&bat0lowWarn)||\
-			(bat1Exists&&bat0lowWarn&&bat1lowWarn))&& \
+			(bat1Exists&&bat0lowWarn&&bat1lowWarn))&&\
 			!lowBatWarning_warned){
 			
 			wall(wallLowBatWarning);
@@ -305,7 +312,7 @@ main(){
 			updateChargerState();
 			checkForLowPower();
 #ifdef DEBUG_PRINT
-			printf("bat0 %f bat1 %f\n",bat0charge, bat0charge);
+			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 #endif
 			sleep(loopInterval);}
 	return(0);}

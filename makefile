@@ -1,8 +1,5 @@
-ifeq ($(PREFIX),)
-    PREFIX := /usr/local
-endif
-ifeq ($(D),)
-    D := /
+ifeq ($(DESTDIR),)
+    DESTDIR := /
 endif
 
 CC = gcc 
@@ -15,17 +12,16 @@ debug:
 clean:
 	rm -f lpmd lpmd-profiler gmon.out
 install: lpmd
-	cp lpmd $(PREFIX)/bin/lpmd 
-	cp lpmd-openrc /etc/init.d/lpmd 
-	chmod +x /usr/bin/lpmd /etc/init.d/lpmd
+	cp lpmd ${DESTDIR}/bin/lpmd 
+	cp lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
+	chmod +x ${DESTDIR}/bin/lpmd ${DESTDIR}/etc/init.d/lpmd
 uninstall:
 	rm -f $(PREFIX)/bin/lpmd /etc/init.d/lmpd
 
 su-install: lpmd
-	su root -c 'cp lpmd /usr/bin/lpmd && cp lpmd-openrc /etc/init.d/lpmd && chmod +x /usr/bin/lpmd /etc/init.d/lpmd'
+	su root -c 'make install'
 su-uninstall:
-	su root -c 'rm -f /usr/bin/lpmd /etc/init.d/lmpd'
-
+	su root -c 'make uninstall'
 
 compile_profiler: 
 	$(CC) $(CFLAGS) lpmd.c -o lpmd_profiler -DDEBUG -pg
