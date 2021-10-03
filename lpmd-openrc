@@ -4,14 +4,6 @@ name="lpmd daemon"
 description="small linux power management daemon"
 command="/usr/bin/lpmd"
 command_args=""
-
-start(){
-	ebegin "Starting lpmd"
-	start-stop-daemon --start --exec $command --name lpmd --make-pidfile --pidfile /run/lpmd.pid --background --stderr-logger "/usr/bin/logger --tag lpmd"
-	}
-
-stop(){
-	ebegin "Stopping lpmd"
-	start-stop-daemon --stop --name lpmd
-	}
-
+pidfile="/run/lpmd.pid"
+error_logger="/usr/bin/logger --tag lpmd"
+command_background=true

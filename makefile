@@ -18,7 +18,7 @@ install: lpmd
 	cp lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
 	chmod +x ${DESTDIR}/usr/bin/lpmd ${DESTDIR}/etc/init.d/lpmd
 uninstall:
-	rm -f $(PREFIX)/bin/lpmd /etc/init.d/lmpd
+	rm -f $(DESTDIR)/bin/lpmd $(DESTDIR)/etc/init.d/lmpd
 
 su-install: lpmd
 	su root -c 'make install'
