@@ -1,5 +1,10 @@
 ifeq ($(DESTDIR),)
-    DESTDIR := /
+ DESTDIR := 
+ PREFIX := /usr/local
+else
+ ifeq ($(PREFIX),)
+  PREFIX := /usr
+ endif
 endif
 
 CC = gcc 
@@ -12,13 +17,10 @@ debug:
 clean:
 	rm -f lpmd lpmd-profiler gmon.out
 install: lpmd
-	mkdir -p ${DESTDIR}/usr/bin
-	cp lpmd ${DESTDIR}/usr/bin/lpmd
-	mkdir -p ${DESTDIR}/etc/init.d
-	cp lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
-	chmod +x ${DESTDIR}/usr/bin/lpmd ${DESTDIR}/etc/init.d/lpmd
+	install -D -m 755 lpmd ${DESTDIR}/${PREFIX}/bin/lpmd
+	install -D -m 755 lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
 uninstall:
-	rm -f $(DESTDIR)/bin/lpmd $(DESTDIR)/etc/init.d/lmpd
+	rm -f $(DESTDIR)/${PREFIX}/bin/lpmd $(DESTDIR)/etc/init.d/lmpd
 
 su-install: lpmd
 	su root -c 'make install'
