@@ -8,7 +8,9 @@ else
 endif
 
 CC = gcc 
-CFLAGS = -Wall -pedantic -O2
+ifeq ($(CFLAGS),)
+ CFLAGS := -Wall -pedantic -O2 -g 
+endif
 
 lpmd: 
 	$(CC) $(CFLAGS) lpmd.c -o lpmd
