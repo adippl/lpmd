@@ -12,7 +12,7 @@ ifeq ($(CFLAGS),)
  CFLAGS := -Wall -pedantic -O2 -g 
 endif
 
-lpmd: 
+lpmd: lpmd.c
 	$(CC) $(CFLAGS) lpmd.c -o lpmd
 debug: 
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c -o lpmd
