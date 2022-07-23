@@ -83,6 +83,8 @@ const char* intel_pstate_path="/sys/devices/system/cpu/intel_pstate";
 const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_turbo";
 int intel_pstate_present=0;
 char acpi_lid_path_exist=-1;
+#define msg_buf_size 128
+char msgBuf[msg_buf_size]={0};
 
 int powerStateExists=1;
 int bat0Exists=-1;
@@ -206,17 +208,22 @@ checkSysDirs(){
 			bat1Exists=1;
 			bat1maxCharge=fileToint(bat1EnFull);
 			fprintf(stderr, "BAT1 Detected\n");
-			//if(bat1EnNow_fd==-1){
-			//	TODO open fd
+			if(bat1EnNow_fd==-1){
+				if( (bat1EnNow_fd = open(bat1EnNow, O_RDWR|O_APPEND)) ==- 1){
+					snprintf(msgBuf, msg_buf_size, 
+						"failed opening %s\n", bat1EnNow);
+					perror(msgBuf);}}
 			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
 		else{
 			bat1Exists=0;
 			//test
-			if(bat0EnNow_fd)
-				close(bat0EnNow_fd);
+			if(bat0EnNow_fd >= 0 ) // risky??
+				if( close(bat0EnNow_fd) == -1 ){
+					snprintf(msgBuf, msg_buf_size,
+						"couldn't close battery fd %d\n", bat0EnNow_fd);
+					perror(msgBuf);}
 			bat0EnNow_fd=-1;
-			//test
 			bat1HasThresholds=0;
 			fprintf(stderr, "BAT1 Missing\n");}}}
 
@@ -240,7 +247,7 @@ void
 updatePowerPerc_reuse_fd(){
 	int a=0;
 	if(bat0Exists){
-		a=fdToint(bat0EnNow_fd);
+		a=fileToint(bat0EnNow);
 		bat0charge=(float)a/bat0maxCharge;}
 	if(bat1Exists){
 		a=fdToint(bat1EnNow_fd);
@@ -474,7 +481,7 @@ specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 			i=atoi(acpidEvent[3]);
 			printf("charger state %d\n", i);
 			if(i != chargerConnected){
-				chargerConnected=1;
+				chargerConnected=i;
 				chargerChangedState();}}
 		if( !strncmp("button/lid", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN-1 ) && 
 			!strncmp("LID", acpidEvent[1] ,ACPID_STRCMP_MAX_LEN-1 )){
@@ -600,7 +607,8 @@ main(){
 			reconnect_to_acpid();
 			handle_acpid_events();
 			lid_state_handler();
-			updatePowerPerc();
+			//updatePowerPerc();
+			updatePowerPerc_reuse_fd();
 			reconnect_to_acpid();
 			updateChargerState();
 			checkForLowPower();
@@ -608,6 +616,7 @@ main(){
 #ifdef DEBUG_PRINT
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 #endif
+			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 			if(!acpid_connected)
 				sleep(loopInterval);
 			}
