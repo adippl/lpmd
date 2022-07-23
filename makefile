@@ -14,7 +14,7 @@ endif
 
 lpmd: lpmd.c
 	$(CC) $(CFLAGS) lpmd.c -o lpmd
-debug: 
+debug: lpmd.c
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c -o lpmd
 clean:
 	rm -f lpmd lpmd-profiler gmon.out

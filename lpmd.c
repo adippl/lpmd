@@ -72,11 +72,16 @@ const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full_design";
 #endif
 const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
 const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
+int bat0EnNow_fd=-1;
+int bat1EnNow_fd=-1;
 const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
 const char* cpupresetPath="/sys/devices/system/cpu/present";
 const char* acpi_lid_path="/proc/acpi/button/lid/LID/state";
+const char* intel_pstate_path="/sys/devices/system/cpu/intel_pstate";
+const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_turbo";
+int intel_pstate_present=0;
 char acpi_lid_path_exist=-1;
 
 int powerStateExists=1;
@@ -113,7 +118,9 @@ checkDir(const char* path){
 		closedir(dir);
 		return(1);}
 	else if(ENOENT==errno){
-		//perror(path);
+#ifdef DEBUG
+		perror(sprintf("couldn't open %s\n", path));
+#endif
 		return(0);}
 	else{
 		perror(path);
@@ -166,6 +173,18 @@ detectNumberOfCpus(){
 	else
 		perror(cpupresetPath);}
 
+void
+detect_intel_pstate(){
+	if(checkDir(intel_pstate_path)){
+		fprintf(stderr, 
+			"detected intel_pstate, enabling turbo boost control\n");
+			intel_pstate_present=1;
+		if( access( intel_pstate_turbo_path, R_OK|W_OK ) ){
+			fprintf(stderr, 
+				"%s is not writable, disabling turbo boost control\n",
+				intel_pstate_turbo_path);
+			//intel_pstate_present=0; //TODO reenable
+			}}}
 
 void
 checkSysDirs(){
@@ -182,18 +201,51 @@ checkSysDirs(){
 			bat0HasThresholds=0;
 			fprintf(stderr, "BAT0 Missing\n");}}
 	
-	i=checkDir(bat1Dir);
-	if(i!=bat1Exists){
+	if( (i=checkDir(bat1Dir)) != bat1Exists ){
 		if(i){
 			bat1Exists=1;
 			bat1maxCharge=fileToint(bat1EnFull);
 			fprintf(stderr, "BAT1 Detected\n");
+			//if(bat1EnNow_fd==-1){
+			//	TODO open fd
 			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
 		else{
 			bat1Exists=0;
+			//test
+			if(bat0EnNow_fd)
+				close(bat0EnNow_fd);
+			bat0EnNow_fd=-1;
+			//test
 			bat1HasThresholds=0;
 			fprintf(stderr, "BAT1 Missing\n");}}}
+
+// test
+int
+fdToint(int fd){
+	int rd=0;
+	char str[16]={0};
+	if(fd){
+		if(!lseek(fd, 0, SEEK_SET)){
+			perror("failed seeking file (fd)");
+			return(-1);}
+		if( (rd=read(fd, str, 16)) <1 ){
+			perror("failed to read file (fd)");
+			return(-1);}
+		return(atoi(str));}
+	else{
+		return(-1);}}
+
+void
+updatePowerPerc_reuse_fd(){
+	int a=0;
+	if(bat0Exists){
+		a=fdToint(bat0EnNow_fd);
+		bat0charge=(float)a/bat0maxCharge;}
+	if(bat1Exists){
+		a=fdToint(bat1EnNow_fd);
+		bat1charge=(float)a/bat0maxCharge;}}
+// test
 
 void
 updatePowerPerc(){
@@ -249,6 +301,7 @@ get_lid_stat_from_sys(){
 void
 changeGovernor(){
 	const char* gov=NULL;
+	int no_boost=-1;
 	char path[SSTR]={0};
 	if(manageGovernors){
 		switch(chargerConnected){
@@ -259,11 +312,28 @@ changeGovernor(){
 				gov=performanceGovernor;
 				break;
 			default:
-				fprintf(stderr,"ERR changeGovernor inconsistent chargerConnected\n");
+				fprintf(stderr,
+					"ERR changeGovernor inconsistent chargerConnected\n");
 				return;}
 		for(int i=0; i<numberOfCores; i++){
-			sprintf((char*)&path, "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
-			strToFile((char*)&path, (char*)gov);}}}
+			sprintf( (char*)&path, 
+				"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
+			strToFile((char*)&path, (char*)gov);}}
+	if(intel_pstate_present){
+		switch(chargerConnected){
+			case 0:
+				no_boost=1;
+				fprintf(stderr, "disabling cpu boost via intel_pstate\n");
+				break;
+			case 1:
+				no_boost=0;
+				fprintf(stderr, "enabling cpu boost via intel_pstate\n");
+				break;
+			default:
+				fprintf(stderr,
+					"ERR changeGovernor inconsistent chargerConnected\n");
+				return;}
+		intToFile(intel_pstate_turbo_path, no_boost);}}
 
 void
 wall(const char* message){
@@ -513,9 +583,9 @@ main(){
 		powerStateExists=0;}
 	fprintf(stderr, "Lpmd starts\n");
 	detectNumberOfCpus();
-	//connect_to_acpid();
 	reconnect_to_acpid();
 	checkSysDirs();
+	detect_intel_pstate();
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
@@ -524,7 +594,7 @@ main(){
 #else
 		for(;;){
 #endif
-			//puts("DEBUG main loop start\n");
+			puts("DEBUG main loop start\n");
 			checkSysDirs();
 			//sock_print();
 			reconnect_to_acpid();
