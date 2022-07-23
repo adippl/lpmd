@@ -27,6 +27,7 @@
 #include <sys/un.h>
 #include <sys/select.h>
 
+
 #define SSTR 64
 
 #ifndef DEBUG_CYCLES
@@ -74,6 +75,8 @@ const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
 const char* cpupresetPath="/sys/devices/system/cpu/present";
+const char* acpi_lid_path="/proc/acpi/button/lid/LID/state";
+char acpi_lid_path_exist=-1;
 
 int powerStateExists=1;
 int bat0Exists=-1;
@@ -201,6 +204,47 @@ updatePowerPerc(){
 		a=fileToint(bat1EnNow);
 		bat1charge=(float)a/bat0maxCharge;}}
 
+int
+get_lid_stat_from_sys(){
+	char* strtok_saveptr=NULL;
+	char str[32]={0};
+	int i=-1;
+	int f=open(acpi_lid_path, O_RDONLY);
+	char* token=NULL;
+	if(access(acpi_lid_path, R_OK)){
+		acpi_lid_path_exist=0;
+		fprintf(stderr, "Could not find acpi lid. Disabling lib related functionalities. (missing %s)\n", acpi_lid_path);
+		return(1);}
+	if(f){
+		if( read(f, str, 31) <1 ){
+			fprintf(stderr, "couldn't read from %s\n", acpi_lid_path);}
+		close(f);
+		//got the string
+		//remove newline
+		for(int i=0; str[i]!='\0'; i++){
+			if(str[i]=='\n'){
+				str[i]='\0';
+				break;}}
+		token = strtok_r((char*)&str, " ", &strtok_saveptr);
+		token = strtok_r(NULL, " ", &strtok_saveptr);
+		if(!token) {// second field doesn't exist
+			return(1);}
+
+		if(!strncmp("open", token ,10)){
+			i=1;}
+		else if(!strncmp("closed", token ,10)){
+			i=0;}
+		else{
+			printf("DEBUG strange LID state \"%s\"\n", token);}
+		if(i!=lid_state){
+			lid_state_changed=1;
+			lid_state=i;}
+	return(0);}
+	else{
+		perror(powerState);}
+		return(1);
+	}
+
 void
 changeGovernor(){
 	const char* gov=NULL;
@@ -258,9 +302,12 @@ chargerChangedState(){
 
 void
 lid_state_handler(){
-	puts("awdawdwadwadaw");
+	if(!acpid_connected){
+		// acpid connection lost 
+		// falling back to checing via /sys path
+		get_lid_stat_from_sys();}
+		
 	if(lid_state_changed){
-	puts("AWDAWDWADWADAW");
 		lid_state_changed=0;
 		if(lid_state==1){
 			fprintf(stderr, "Lid opened\n");
@@ -309,10 +356,13 @@ char buf[BUF_SIZE];
 int fd_acpid=-1;
 struct sockaddr_un acpid_sock_addr;
 #define ACPID_STRCMP_MAX_LEN 32 
+struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
+fd_set fd_set_acpid;
+fd_set fd_set_acpid_ready;
+
 int
 connect_to_acpid(){
 	memset(buf,0,BUF_SIZE);
-	// fd alredy set, skipping setup because we're probably reconnecting
 	if( (fd_acpid=socket(AF_UNIX, SOCK_STREAM, 0)) == -1 ){
 		perror("socket open");
 		return(1);}
@@ -329,7 +379,10 @@ connect_to_acpid(){
 		
 		perror("acpid socket connect");
 		return(1);}
+	fprintf(stderr, "connected to acpid at %s\n", acpid_sock_path);
 	acpid_connected=1;
+	FD_ZERO(&fd_set_acpid);
+	FD_SET(fd_acpid, &fd_set_acpid); 
 	return(0);}
 void
 sock_print(){
@@ -366,32 +419,59 @@ specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 				puts("lid state changed");
 			lid_state=i;}}
 
-void
-handle_acpid_events(){
-	int numRead=-1;
-	char* token=NULL;
-	char* p_buf=buf;
+int
+handle_read_from_acpid_sock(){
+	int numRead=-2;
+	char* strtok_saveptr=NULL;
 	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
-	if(fd_acpid==-1) return; // exit if fd is unset
-	while ((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
-		//debug
-		//if (write(STDIN_FILENO, buf, numRead) != numRead) {
-		//	fprintf(stderr,"partial/failed write");
-		//}
-		//end debug
+	char* token=NULL;
+	if((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
 		for(int i=0; buf[i]!='\0'; i++){
 			if(buf[i]=='\n')
 				buf[i]='\0';}
 		memset(acpidEvent, 0, sizeof(acpidEvent));
-		token = strtok_r(buf, " ", &p_buf);
+		token = strtok_r(buf, " ", &strtok_saveptr);
 		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
 			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
 			printf("%d \"%s\" len:%lo\n",i,
 				acpidEvent[i],
 				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
-			token = strtok_r(NULL, " ", &p_buf);}
-		specific_events(acpidEvent); }
-	if( numRead == -1 || numRead == 0 ){
+			token = strtok_r(NULL, " ", &strtok_saveptr);}
+		specific_events(acpidEvent);}
+	return(numRead);}
+
+#define ACPID_FDSS 32
+void
+handle_acpid_events(){
+	int numRead=-2;
+	int sel_rc=-1;
+	// reading or setting tv_sec value is required here
+	// without it
+	select_timeout.tv_sec=loopInterval;
+	if(fd_acpid==-1) return; // exit if fd is unset
+	fd_set_acpid_ready=fd_set_acpid;
+	sel_rc = select(ACPID_FDSS, &fd_set_acpid_ready,NULL,NULL, &select_timeout);
+	switch(sel_rc){
+		case(0): // timeout
+#ifdef DEBUG
+			puts("DEBUG select timeout");
+#endif
+			return;
+		case(-1): //error
+#ifdef DEBUG
+			puts("DEBUG select error");
+#endif
+			break;
+		default:
+#ifdef DEBUG
+			puts("DEBUG select read");
+#endif
+			for(int i=0; i<ACPID_FDSS;i++){
+				if(FD_ISSET(i, &fd_set_acpid_ready) && i==fd_acpid){
+					numRead = handle_read_from_acpid_sock();
+					FD_CLR(i, &fd_set_acpid_ready);}}
+	}
+	if( numRead <=0 || sel_rc == -1 ){
 		if(acpid_connected)
 			fprintf(stderr, "lost connection to acpid\n");
 		if(close(fd_acpid)){
@@ -437,11 +517,13 @@ main(){
 	checkSysDirs();
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
+	get_lid_stat_from_sys();
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
 #else
 		for(;;){
 #endif
+			//puts("DEBUG main loop start\n");
 			checkSysDirs();
 			//sock_print();
 			reconnect_to_acpid();
@@ -451,8 +533,11 @@ main(){
 			reconnect_to_acpid();
 			updateChargerState();
 			checkForLowPower();
+			//puts("DEBUG main loop end\n");
 #ifdef DEBUG_PRINT
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 #endif
-			sleep(loopInterval);}
+			if(!acpid_connected)
+				sleep(loopInterval);
+			}
 	return(0);}
