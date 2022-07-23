@@ -23,6 +23,10 @@
 #include <unistd.h>
 #include <fcntl.h>
 
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <sys/select.h>
+
 #define SSTR 64
 
 #ifndef DEBUG_CYCLES
@@ -86,6 +90,10 @@ float bat1charge=0.0;
 int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
+
+int acpid_connected=0;
+int lid_state=0;
+int lid_state_changed=1;
 
 int
 checkFile(const char* path){
@@ -153,6 +161,7 @@ detectNumberOfCpus(){
 		fclose(f);}
 	else
 		perror(cpupresetPath);}
+
 
 void
 checkSysDirs(){
@@ -248,7 +257,26 @@ chargerChangedState(){
 		lowBatWarning_warned=0;}}
 
 void
+lid_state_handler(){
+	puts("awdawdwadwadaw");
+	if(lid_state_changed){
+	puts("AWDAWDWADWADAW");
+		lid_state_changed=0;
+		if(lid_state==1){
+			fprintf(stderr, "Lid opened\n");
+			//TODO Lid opening action
+			}
+		else if(lid_state==0) {
+			fprintf(stderr, "Lid closed\n");
+			//TODO lid closing action
+			}}}
+
+void
 updateChargerState(){
+	if(acpid_connected) return; // skip primitive check if acpid is avaliable
+#ifdef DEBUG
+	puts(" updateChargerState ");
+#endif
 	int c=fileToint(chargerConnectedPath);
 	if(c != chargerConnected){
 		chargerConnected=c;
@@ -272,6 +300,111 @@ suspend(){
 		else{
 			perror(powerState);}}
 #endif
+
+
+#define BUF_SIZE 512
+//char acpid_sock_path[]="/var/run/acpid.socket";
+const char acpid_sock_path[]="/run/acpid.socket";
+char buf[BUF_SIZE];
+int fd_acpid=-1;
+struct sockaddr_un acpid_sock_addr;
+#define ACPID_STRCMP_MAX_LEN 32 
+int
+connect_to_acpid(){
+	memset(buf,0,BUF_SIZE);
+	// fd alredy set, skipping setup because we're probably reconnecting
+	if( (fd_acpid=socket(AF_UNIX, SOCK_STREAM, 0)) == -1 ){
+		perror("socket open");
+		return(1);}
+	memset(&acpid_sock_addr, 0, sizeof(acpid_sock_addr));
+	acpid_sock_addr.sun_family = AF_UNIX;
+	strncpy(
+		acpid_sock_addr.sun_path,
+		acpid_sock_path,
+		sizeof(acpid_sock_addr.sun_path)-1);
+	if(connect(
+		fd_acpid, 
+		(struct sockaddr *)&acpid_sock_addr, 
+		sizeof(struct sockaddr_un)) == -1){
+		
+		perror("acpid socket connect");
+		return(1);}
+	acpid_connected=1;
+	return(0);}
+void
+sock_print(){
+	int numRead=-1;
+	while ((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0) {
+		if (write(STDIN_FILENO, buf, numRead) != numRead) {
+		  fprintf(stderr,"partial/failed write");
+		}
+	}
+}
+#define ACPID_EV_MAX 5
+void
+specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
+		int i=0;
+		puts(acpidEvent[0]);
+		//for(int i=0; i<ACPID_EV_MAX; i++){
+		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN-1 )){
+			i=atoi(acpidEvent[3]);
+			printf("charger state %d\n", i);
+			if(i != chargerConnected){
+				chargerConnected=1;
+				chargerChangedState();}}
+		if( !strncmp("button/lid", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN-1 ) && 
+			!strncmp("LID", acpidEvent[1] ,ACPID_STRCMP_MAX_LEN-1 )){
+			
+			puts(acpidEvent[1]);
+			puts(acpidEvent[2]);
+			if(!strncmp("open", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN-1 )){
+				i=1;}
+			if(!strncmp("close", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN-1 )){
+				i=0;}
+			if(i!=lid_state){
+				lid_state_changed=1;}
+				puts("lid state changed");
+			lid_state=i;}}
+
+void
+handle_acpid_events(){
+	int numRead=-1;
+	char* token=NULL;
+	char* p_buf=buf;
+	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
+	if(fd_acpid==-1) return; // exit if fd is unset
+	while ((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
+		//debug
+		//if (write(STDIN_FILENO, buf, numRead) != numRead) {
+		//	fprintf(stderr,"partial/failed write");
+		//}
+		//end debug
+		for(int i=0; buf[i]!='\0'; i++){
+			if(buf[i]=='\n')
+				buf[i]='\0';}
+		memset(acpidEvent, 0, sizeof(acpidEvent));
+		token = strtok_r(buf, " ", &p_buf);
+		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
+			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
+			printf("%d \"%s\" len:%lo\n",i,
+				acpidEvent[i],
+				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
+			token = strtok_r(NULL, " ", &p_buf);}
+		specific_events(acpidEvent); }
+	if( numRead == -1 || numRead == 0 ){
+		if(acpid_connected)
+			fprintf(stderr, "lost connection to acpid\n");
+		if(close(fd_acpid)){
+			perror("socket close error");}
+		acpid_connected=0;
+		fd_acpid=-1;}
+	memset(buf, 0, sizeof(buf));
+}
+void
+reconnect_to_acpid(){
+	if(!acpid_connected && !access(acpid_sock_path, R_OK)){
+		connect_to_acpid();}}
+
 
 void
 checkForLowPower(){
@@ -299,6 +432,8 @@ main(){
 		powerStateExists=0;}
 	fprintf(stderr, "Lpmd starts\n");
 	detectNumberOfCpus();
+	//connect_to_acpid();
+	reconnect_to_acpid();
 	checkSysDirs();
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
@@ -308,7 +443,12 @@ main(){
 		for(;;){
 #endif
 			checkSysDirs();
+			//sock_print();
+			reconnect_to_acpid();
+			handle_acpid_events();
+			lid_state_handler();
 			updatePowerPerc();
+			reconnect_to_acpid();
 			updateChargerState();
 			checkForLowPower();
 #ifdef DEBUG_PRINT
