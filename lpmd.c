@@ -27,6 +27,7 @@
 #include <sys/un.h>
 #include <sys/select.h>
 
+#include "lpmd_messages.h"
 
 #define SSTR 64
 
