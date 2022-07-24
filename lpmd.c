@@ -47,8 +47,8 @@ const float batMinSleepThreshold=0.15f;
 const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
 const int manageGovernors=1;
-const char* powersaveGovernor="powersave";
-const char* performanceGovernor="performance";
+const char* powersaveGovernor_str="powersave";
+const char* performanceGovernor_str="performance";
 const int syncBeforeSuspend=1;
 const int suspendDelay=60;
 const int wallNotify=1;
@@ -102,9 +102,44 @@ int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
 
+#define GOV_POWERSAVE 0
+#define GOV_PERFORMANCE 1
+#define GOV_ONDEMAND 1
+//enum governor { powersave=0, performance=1 , ondemand=2 };
+static const char *governor_string[] = { 
+	"powersave", "performance", "ondemand", };
+int cpu_boost_on=0;
+int cpu_boost_off=1;
+
+
 int acpid_connected=0;
 int lid_state=0;
 int lid_state_changed=1;
+
+
+void setGovernor(int governor);
+void cpu_boost_control(int i);
+
+void
+action_lid_open(){
+	fprintf(stderr, "Lid opened\n");
+	}
+void
+action_lid_close(){
+	fprintf(stderr, "Lid closed\n");
+	}
+void
+action_charger_connected(){
+	fprintf(stderr, "Charger connected\n");
+	setGovernor(GOV_PERFORMANCE);
+	cpu_boost_control(cpu_boost_on);
+	}
+void
+action_charger_disconnected(){
+	fprintf(stderr, "Charger disconnected\n");
+	setGovernor(GOV_POWERSAVE);
+	cpu_boost_control(cpu_boost_off);
+	lowBatWarning_warned=0;}
 
 int
 checkFile(const char* path){
@@ -202,6 +237,32 @@ checkSysDirs(){
 			bat0Exists=0;
 			bat0HasThresholds=0;
 			fprintf(stderr, "BAT0 Missing\n");}}
+	if(i!=bat1Exists){
+		if(i){
+			bat1Exists=1;
+			fprintf(stderr, "BAT0 Detected\n");
+			bat1maxCharge=fileToint(bat1EnFull);
+			if(checkFile(bat1ThrStrt) && checkFile(bat1ThrStop)){
+				bat1HasThresholds=1;}}
+		else{
+			bat1Exists=0;
+			bat1HasThresholds=0;
+			fprintf(stderr, "BAT0 Missing\n");}}}
+
+void
+checkSysDirs_fd_reuse_test(){ //test function
+	int i=checkDir(bat0Dir);
+	if(i!=bat0Exists){
+		if(i){
+			bat0Exists=1;
+			fprintf(stderr, "BAT0 Detected\n");
+			bat0maxCharge=fileToint(bat0EnFull);
+			if(checkFile(bat0ThrStrt) && checkFile(bat0ThrStop)){
+				bat0HasThresholds=1;}}
+		else{
+			bat0Exists=0;
+			bat0HasThresholds=0;
+			fprintf(stderr, "BAT0 Missing\n");}}
 	
 	if( (i=checkDir(bat1Dir)) != bat1Exists ){
 		if(i){
@@ -218,18 +279,17 @@ checkSysDirs(){
 		else{
 			bat1Exists=0;
 			//test
-			if(bat0EnNow_fd >= 0 ) // risky??
-				if( close(bat0EnNow_fd) == -1 ){
+			if(bat1EnNow_fd >= 0 ) // risky??
+				if( close(bat1EnNow_fd) == -1 ){
 					snprintf(msgBuf, msg_buf_size,
-						"couldn't close battery fd %d\n", bat0EnNow_fd);
+						"couldn't close battery fd %d\n", bat1EnNow_fd);
 					perror(msgBuf);}
-			bat0EnNow_fd=-1;
+			bat1EnNow_fd=-1;
 			bat1HasThresholds=0;
 			fprintf(stderr, "BAT1 Missing\n");}}}
 
-// test
 int
-fdToint(int fd){
+fdToint(int fd){ //test function
 	int rd=0;
 	char str[16]={0};
 	if(fd){
@@ -244,14 +304,14 @@ fdToint(int fd){
 		return(-1);}}
 
 void
-updatePowerPerc_reuse_fd(){
+updatePowerPerc_reuse_fd(){ //test function
 	int a=0;
 	if(bat0Exists){
 		a=fileToint(bat0EnNow);
 		bat0charge=(float)a/bat0maxCharge;}
 	if(bat1Exists){
 		a=fdToint(bat1EnNow_fd);
-		bat1charge=(float)a/bat0maxCharge;}}
+		bat1charge=(float)a/bat1maxCharge;}}
 // test
 
 void
@@ -262,7 +322,7 @@ updatePowerPerc(){
 		bat0charge=(float)a/bat0maxCharge;}
 	if(bat1Exists){
 		a=fileToint(bat1EnNow);
-		bat1charge=(float)a/bat0maxCharge;}}
+		bat1charge=(float)a/bat1maxCharge;}}
 
 int
 get_lid_stat_from_sys(){
@@ -306,26 +366,39 @@ get_lid_stat_from_sys(){
 	}
 
 void
-changeGovernor(){
+setGovernor(int governor){
 	const char* gov=NULL;
-	int no_boost=-1;
 	char path[SSTR]={0};
 	if(manageGovernors){
-		switch(chargerConnected){
-			case 0:
-				gov=powersaveGovernor;
+		if(intel_pstate_present &&
+			(governor!=GOV_PERFORMANCE && governor!=GOV_POWERSAVE)){
+			
+			fprintf(stderr, "intel_pstate does not support \"%s\" governor\n",
+				governor_string[governor]);
+			fprintf(stderr, "not changing governor\n");
+				return;}
+		switch(governor){
+			case GOV_POWERSAVE:
+				gov=powersaveGovernor_str;
 				break;
-			case 1:
-				gov=performanceGovernor;
+			case GOV_PERFORMANCE:
+				gov=performanceGovernor_str;
 				break;
 			default:
 				fprintf(stderr,
-					"ERR changeGovernor inconsistent chargerConnected\n");
+					"ERR wrong governor type, not switching\n");
 				return;}
 		for(int i=0; i<numberOfCores; i++){
 			sprintf( (char*)&path, 
 				"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
 			strToFile((char*)&path, (char*)gov);}}
+	else
+		fprintf(stderr, 
+			"not switching cpu governor, governor management disabled\n");}
+
+void
+cpu_boost_control(int i){
+	int no_boost=-1;
 	if(intel_pstate_present){
 		switch(chargerConnected){
 			case 0:
@@ -338,7 +411,7 @@ changeGovernor(){
 				break;
 			default:
 				fprintf(stderr,
-					"ERR changeGovernor inconsistent chargerConnected\n");
+					"ERR %s wrong argument %d\n", __func__, i);
 				return;}
 		intToFile(intel_pstate_turbo_path, no_boost);}}
 
@@ -371,12 +444,10 @@ setThresholds(){
 
 void
 chargerChangedState(){
-	changeGovernor();
-	if(chargerConnected){
-		fprintf(stderr, "Charger connected\n");}
-	else{
-		fprintf(stderr, "Charger disconnected\n");
-		lowBatWarning_warned=0;}}
+	if(chargerConnected)
+		action_charger_connected();
+	else
+		action_charger_disconnected();}
 
 void
 lid_state_handler(){
@@ -387,14 +458,10 @@ lid_state_handler(){
 		
 	if(lid_state_changed){
 		lid_state_changed=0;
-		if(lid_state==1){
-			fprintf(stderr, "Lid opened\n");
-			//TODO Lid opening action
-			}
-		else if(lid_state==0) {
-			fprintf(stderr, "Lid closed\n");
-			//TODO lid closing action
-			}}}
+		if(lid_state==1)
+			action_lid_open();
+		else if(lid_state==0)
+			action_lid_close();}}
 
 void
 updateChargerState(){
@@ -408,7 +475,7 @@ updateChargerState(){
 		chargerChangedState();}}
 
 void
-suspend(){
+battery_low_suspend(){ //TODO crete generic version withouw WALL
 #ifdef DEBUG
 		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
 		return;}
@@ -573,7 +640,7 @@ checkForLowPower(){
 	if(!chargerConnected){
 		if( (bat0Exists&&bat0low)||(bat1Exists&&bat0low&&bat1low)){
 			
-			suspend();
+			battery_low_suspend();
 			return;}}
 		if(((bat0Exists&&bat0lowWarn)||\
 			(bat1Exists&&bat0lowWarn&&bat1lowWarn))&&\
@@ -607,8 +674,8 @@ main(){
 			reconnect_to_acpid();
 			handle_acpid_events();
 			lid_state_handler();
-			//updatePowerPerc();
-			updatePowerPerc_reuse_fd();
+			updatePowerPerc();
+			//updatePowerPerc_reuse_fd();
 			reconnect_to_acpid();
 			updateChargerState();
 			checkForLowPower();
