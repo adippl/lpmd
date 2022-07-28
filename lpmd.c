@@ -30,15 +30,16 @@
 #include "lpmd_messages.h"
 
 #define SSTR 64
+#define msg_buff_size 128
+char msg_buff[msg_buff_size]={0};
+
 
 #ifndef DEBUG_CYCLES
 	#define DEBUG_CYCLES 360
 #endif
 
 /* config section */
-#ifndef ENERGY_FULL
-	#define ENERGY_FULL
-#endif
+/* config variables */
 const int bat0ThrStrtVal=45;
 const int bat0ThrStopVal=75;
 const int bat1ThrStrtVal=45;
@@ -54,9 +55,9 @@ const int suspendDelay=60;
 const int wallNotify=1;
 const char* wallSuspendWarning="WARNING!!!\nWARNING!!!  battery0 is low.\nWARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
 const char* wallLowBatWarning="WARNING!!!\nWARNING!!!  battery0 is below 25%\n";
-/* end of config */
 
-const char* powerDir="/sys/class/power_supply";
+/* /sys fs file paths */
+static const char* powerDir="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
 const char* bat1Dir="/sys/class/power_supply/BAT1";
 const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
@@ -81,11 +82,19 @@ const char* cpupresetPath="/sys/devices/system/cpu/present";
 const char* acpi_lid_path="/proc/acpi/button/lid/LID/state";
 const char* intel_pstate_path="/sys/devices/system/cpu/intel_pstate";
 const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_turbo";
+
+//enum governor { powersave=0, performance=1 , ondemand=2 };
+#define GOV_POWERSAVE 0
+#define GOV_PERFORMANCE 1
+#define GOV_ONDEMAND 1
+static const char *governor_string[] = { 
+	"powersave", "performance", "ondemand", };
+int cpu_boost_on=0;
+int cpu_boost_off=1;
+
+/* runtime variables */
 int intel_pstate_present=0;
 char acpi_lid_path_exist=-1;
-#define msg_buf_size 128
-char msgBuf[msg_buf_size]={0};
-
 int powerStateExists=1;
 int bat0Exists=-1;
 int bat1Exists=-1;
@@ -93,28 +102,26 @@ int bat0HasThresholds=0;
 int bat1HasThresholds=0;
 int bat0maxCharge=0;
 int bat1maxCharge=0;
-
 float bat0charge=0.0;
 float bat1charge=0.0;
-/* float bat0chargeDelta=0.0; */
-/* float bat1chargeDelta=0.0; */
 int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
-
-#define GOV_POWERSAVE 0
-#define GOV_PERFORMANCE 1
-#define GOV_ONDEMAND 1
-//enum governor { powersave=0, performance=1 , ondemand=2 };
-static const char *governor_string[] = { 
-	"powersave", "performance", "ondemand", };
-int cpu_boost_on=0;
-int cpu_boost_off=1;
-
-
 int acpid_connected=0;
 int lid_state=0;
 int lid_state_changed=1;
+
+
+/* connection to acpid*/
+#define BUF_SIZE 512
+const char acpid_sock_path[]="/run/acpid.socket";
+char buf[BUF_SIZE];
+int fd_acpid=-1;
+struct sockaddr_un acpid_sock_addr;
+#define ACPID_STRCMP_MAX_LEN 32 
+struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
+fd_set fd_set_acpid;
+fd_set fd_set_acpid_ready;
 
 
 void setGovernor(int governor);
@@ -175,7 +182,6 @@ fileToint(const char* path){
 			fclose(file);
 			return(-1);}}
 	return(-1);}
-
 
 void
 intToFile(const char* path, int i){
@@ -271,9 +277,9 @@ checkSysDirs_fd_reuse_test(){ //test function
 			fprintf(stderr, "BAT1 Detected\n");
 			if(bat1EnNow_fd==-1){
 				if( (bat1EnNow_fd = open(bat1EnNow, O_RDWR|O_APPEND)) ==- 1){
-					snprintf(msgBuf, msg_buf_size, 
+					snprintf(msg_buff, msg_buff_size, 
 						"failed opening %s\n", bat1EnNow);
-					perror(msgBuf);}}
+					perror(msg_buff);}}
 			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
 		else{
@@ -281,9 +287,9 @@ checkSysDirs_fd_reuse_test(){ //test function
 			//test
 			if(bat1EnNow_fd >= 0 ) // risky??
 				if( close(bat1EnNow_fd) == -1 ){
-					snprintf(msgBuf, msg_buf_size,
+					snprintf(msg_buff, msg_buff_size,
 						"couldn't close battery fd %d\n", bat1EnNow_fd);
-					perror(msgBuf);}
+					perror(msg_buff);}
 			bat1EnNow_fd=-1;
 			bat1HasThresholds=0;
 			fprintf(stderr, "BAT1 Missing\n");}}}
@@ -362,8 +368,147 @@ get_lid_stat_from_sys(){
 	return(0);}
 	else{
 		perror(powerState);}
-		return(1);
+		return(1);}
+
+void
+error_errno_msg_exit(const char* msg1, const char* msg2){
+	if(msg2)
+		snprintf(
+			msg_buff,
+			msg_buff_size,
+			"EXIT_ERROR %s %s",
+			msg1,
+			msg2);
+	else
+		snprintf(
+			msg_buff,
+			msg_buff_size,
+			"EXIT_ERROR %s",
+			msg1);
+	perror(msg_buff);
+	exit(EXIT_FAILURE);}
+
+#ifndef NO_SOCKET
+#include <sys/stat.h>
+#include <pwd.h>
+#include <grp.h>
+#define LISTEN_BACKLOG 32
+const char* daemon_socket_user= 	"root";
+const char* daemon_socket_group=	"users";
+const int   daemon_socket_perm=		0600;
+//const char* daemon_sock_path="/run/lpmd.socket";
+const char* daemon_sock_path="./lpmd.socket";
+int daemon_sock=-2;
+
+struct sockaddr_un daemon_sock_addr;
+
+void
+chown_custom(const char* path, const char* user, const char* group){
+	gid_t uid = 0;
+	struct passwd* s_passwd = getpwnam( user );
+	gid_t gid = 0;
+	struct group* s_group = getgrnam( group );
+	if(!s_passwd)
+		error_errno_msg_exit("user doesn't exist", user);
+	uid = s_passwd->pw_uid;
+	if(!s_group)
+		error_errno_msg_exit("group doesn't exist", group);
+	gid = s_group->gr_gid;
+	if( chown(path, uid, gid) == -1 )
+		error_errno_msg_exit("couldn't set group on file ", path);}
+
+void
+daemon_sock_create(){
+	/* check if file exist */
+	if(access(daemon_sock_path,F_OK) == 0 )
+		error_errno_msg_exit(
+			daemon_sock_path,
+			"exists, another instance may exists. Exitting");
+	
+	/* create socket */
+	daemon_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(daemon_sock == -1)
+		error_errno_msg_exit("couldn't open socket", daemon_sock_path);
+	
+	daemon_sock_addr.sun_family=AF_UNIX;
+	
+	strncpy(
+		daemon_sock_addr.sun_path,
+		daemon_sock_path,
+		sizeof(daemon_sock_addr.sun_path)-1);
+//	unlink(daemon_sock_addr.sun_path);
+//	if( unlink(daemon_sock_addr.sun_path) == -1)
+//	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
+//		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);
+//	
+	if( bind(
+			daemon_sock,
+			(struct sockaddr *)&daemon_sock_addr,
+			sizeof(daemon_sock_addr)
+		) == -1 )
+		error_errno_msg_exit("couldn't bind socket", daemon_sock_path);
+	
+	/* set socket permisions */
+	if(chmod(daemon_sock_path, 0660)==-1)
+		error_errno_msg_exit("chmod failed on socket",NULL);
+	
+	chown_custom(
+		daemon_sock_path,
+		daemon_socket_user,
+		daemon_socket_group);
+	
+	if( listen(daemon_sock, LISTEN_BACKLOG) == -1 )
+		error_errno_msg_exit("listen command failed",NULL);}
+
+void
+daemon_sock_close(){
+	if(daemon_sock == -2)
+		return;
+	// TODO daemon_send_goodbye_msg_to_clients
+	if(shutdown(daemon_sock, SHUT_RDWR) == -1)
+		error_errno_msg_exit("couldn't shutdown socket", daemon_sock_path);
+	if(close(daemon_sock))
+		error_errno_msg_exit("couldn't close socket", daemon_sock_path);
+	daemon_sock=-1;
+	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
+		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);}
+#endif
+
+
+void
+lpmd_clanup(){
+#ifndef NO_SOCKET
+	daemon_sock_close();
+#endif
 	}
+
+/* signal section */
+#include <signal.h>
+void
+sigterm_handler(int signal, siginfo_t *info, void *_unused){
+	fprintf(stderr, "Received SIGTERM from process with pid = %u\n",
+		info->si_pid);
+	lpmd_clanup();
+	exit(0);}
+void
+sigint_handler(int signal, siginfo_t *info, void *_unused){
+	fprintf(stderr, "Received SIGINT from process with pid = %u\n",
+		info->si_pid);
+	lpmd_clanup();
+	exit(0);}
+
+void
+setup_sigaction(){
+	struct sigaction action = { 0 };
+	action.sa_flags = SA_SIGINFO;
+	action.sa_sigaction = &sigterm_handler;
+	if(sigaction(SIGTERM, &action, NULL) == -1)
+		error_errno_msg_exit("sigaction failed",NULL);
+	action.sa_sigaction = &sigint_handler;
+	if(sigaction(SIGINT, &action, NULL) == -1)
+		error_errno_msg_exit("sigaction failed",NULL);
+		}
+/* END signal section */
 
 void
 setGovernor(int governor){
@@ -493,17 +638,6 @@ battery_low_suspend(){ //TODO crete generic version withouw WALL
 			perror(powerState);}}
 #endif
 
-
-#define BUF_SIZE 512
-//char acpid_sock_path[]="/var/run/acpid.socket";
-const char acpid_sock_path[]="/run/acpid.socket";
-char buf[BUF_SIZE];
-int fd_acpid=-1;
-struct sockaddr_un acpid_sock_addr;
-#define ACPID_STRCMP_MAX_LEN 32 
-struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
-fd_set fd_set_acpid;
-fd_set fd_set_acpid_ready;
 
 int
 connect_to_acpid(){
@@ -663,6 +797,10 @@ main(){
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
+#ifndef NO_SOCKET
+	daemon_sock_create();
+	setup_sigaction();
+#endif
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
 #else
