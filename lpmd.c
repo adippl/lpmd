@@ -26,6 +26,7 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/select.h>
+#include <poll.h>
 
 #include "lpmd_messages.h"
 
@@ -393,14 +394,31 @@ error_errno_msg_exit(const char* msg1, const char* msg2){
 #include <pwd.h>
 #include <grp.h>
 #define LISTEN_BACKLOG 32
+#define MAX_FDS 40
+#define D_SOCK 0
+#define D_ADM_SOCK 1
 const char* daemon_socket_user= 	"root";
 const char* daemon_socket_group=	"users";
-const int   daemon_socket_perm=		0600;
+const int   daemon_socket_perm=		0660;
 //const char* daemon_sock_path="/run/lpmd.socket";
 const char* daemon_sock_path="./lpmd.socket";
 int daemon_sock=-2;
-
 struct sockaddr_un daemon_sock_addr;
+
+const char* daemon_adm_socket_user= 	"root";
+const char* daemon_adm_socket_group=	"wheel";
+const int   daemon_adm_socket_perm=		0660;
+//const char* daemon_adm_sock_path="/run/lpmd.socket";
+const char* daemon_adm_sock_path="./lpmd_adm.socket";
+int daemon_adm_sock=-2;
+struct sockaddr_un daemon_adm_sock_addr;
+
+struct pollfd fds[MAX_FDS];
+int poll_timeout = 1000 * loopInterval;
+int nfds = 0;
+int current_nfds = 0;
+int current_size = 0;
+
 
 void
 chown_custom(const char* path, const char* user, const char* group){
@@ -458,7 +476,11 @@ daemon_sock_create(){
 		daemon_socket_group);
 	
 	if( listen(daemon_sock, LISTEN_BACKLOG) == -1 )
-		error_errno_msg_exit("listen command failed",NULL);}
+		error_errno_msg_exit("listen command failed",NULL);
+	fds[D_SOCK].fd=daemon_sock;
+	fds[D_SOCK].events=POLLIN;
+	nfds++;
+	}
 
 void
 daemon_sock_close(){
@@ -472,6 +494,72 @@ daemon_sock_close(){
 	daemon_sock=-1;
 	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
 		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);}
+
+void
+daemon_adm_sock_create(){
+	/* check if file exist */
+	if(access(daemon_adm_sock_path,F_OK) == 0 )
+		error_errno_msg_exit(
+			daemon_adm_sock_path,
+			"exists, another instance may exists. Exitting");
+	
+	/* create socket */
+	daemon_adm_sock = socket(AF_UNIX, SOCK_STREAM, 0);
+	if(daemon_adm_sock == -1)
+		error_errno_msg_exit("couldn't open socket", daemon_adm_sock_path);
+	
+	daemon_adm_sock_addr.sun_family=AF_UNIX;
+	
+	strncpy(
+		daemon_adm_sock_addr.sun_path,
+		daemon_adm_sock_path,
+		sizeof(daemon_adm_sock_addr.sun_path)-1);
+//	unlink(daemon_adm_sock_addr.sun_path);
+//	if( unlink(daemon_adm_sock_addr.sun_path) == -1)
+//	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
+//		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);
+//	
+	if( bind(
+			daemon_adm_sock,
+			(struct sockaddr *)&daemon_adm_sock_addr,
+			sizeof(daemon_adm_sock_addr)
+		) == -1 )
+		error_errno_msg_exit("couldn't bind socket", daemon_adm_sock_path);
+	
+	/* set socket permisions */
+	if(chmod(daemon_adm_sock_path, 0660)==-1)
+		error_errno_msg_exit("chmod failed on socket",NULL);
+	
+	chown_custom(
+		daemon_adm_sock_path,
+		daemon_adm_socket_user,
+		daemon_adm_socket_group);
+	
+	if( listen(daemon_adm_sock, LISTEN_BACKLOG) == -1 )
+		error_errno_msg_exit("listen command failed",NULL);
+	fds[D_SOCK].fd=daemon_sock;
+	fds[D_SOCK].events=POLLIN;
+	nfds++;}
+
+void
+daemon_adm_sock_close(){
+	if(daemon_adm_sock == -2)
+		return;
+	// TODO daemon_send_goodbye_msg_to_clients
+	if(shutdown(daemon_adm_sock, SHUT_RDWR) == -1)
+		error_errno_msg_exit("couldn't shutdown socket", daemon_adm_sock_path);
+	if(close(daemon_adm_sock))
+		error_errno_msg_exit("couldn't close socket", daemon_adm_sock_path);
+	daemon_adm_sock=-1;
+	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
+		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);}
+
+
+void
+poll_daemon_sockets(){
+	if( poll( fds, nfds, poll_timeout) < 0 )
+		error_errno_msg_exit("poll failed", NULL);
+}
 #endif
 
 
@@ -479,6 +567,7 @@ void
 lpmd_clanup(){
 #ifndef NO_SOCKET
 	daemon_sock_close();
+	daemon_adm_sock_close();
 #endif
 	}
 
@@ -798,7 +887,9 @@ main(){
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
 #ifndef NO_SOCKET
+	memset(fds, 0 , sizeof(fds));
 	daemon_sock_create();
+	daemon_adm_sock_create();
 	setup_sigaction();
 #endif
 #ifdef DEBUG

@@ -20,5 +20,8 @@ const char* daemon_hibernate_refuse="daemon_hibernate_refuse";
 const char* daemon_ask_for_screen_locks="daemon_ask_for_screen_locks";
 const char* daemon_exit_goodbye="daemon_exit_goodbye";
 
+//const char* client_ask_bat_info="client_ask_bat_info";
+//const char* daemon_ask_bat_info="daemon_ask_bat_info";
+
 #endif // _LPMD_MESSAES_H
 
