@@ -22,6 +22,7 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <time.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -121,8 +122,6 @@ int fd_acpid=-1;
 struct sockaddr_un acpid_sock_addr;
 #define ACPID_STRCMP_MAX_LEN 32 
 struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
-fd_set fd_set_acpid;
-fd_set fd_set_acpid_ready;
 
 
 void setGovernor(int governor);
@@ -149,6 +148,26 @@ action_charger_disconnected(){
 	cpu_boost_control(cpu_boost_off);
 	lowBatWarning_warned=0;}
 
+
+void
+error_errno_msg_exit(const char* msg1, const char* msg2){
+	if(msg2)
+		snprintf(
+			msg_buff,
+			msg_buff_size,
+			"EXIT_ERROR %s %s",
+			msg1,
+			msg2);
+	else
+		snprintf(
+			msg_buff,
+			msg_buff_size,
+			"EXIT_ERROR %s",
+			msg1);
+	perror(msg_buff);
+	exit(EXIT_FAILURE);}
+
+
 int
 checkFile(const char* path){
 	if(access(path,F_OK)==0){
@@ -164,7 +183,7 @@ checkDir(const char* path){
 		return(1);}
 	else if(ENOENT==errno){
 #ifdef DEBUG
-		perror(sprintf("couldn't open %s\n", path));
+		error_errno_msg_exit("couldn't open", path);
 #endif
 		return(0);}
 	else{
@@ -371,32 +390,17 @@ get_lid_stat_from_sys(){
 		perror(powerState);}
 		return(1);}
 
-void
-error_errno_msg_exit(const char* msg1, const char* msg2){
-	if(msg2)
-		snprintf(
-			msg_buff,
-			msg_buff_size,
-			"EXIT_ERROR %s %s",
-			msg1,
-			msg2);
-	else
-		snprintf(
-			msg_buff,
-			msg_buff_size,
-			"EXIT_ERROR %s",
-			msg1);
-	perror(msg_buff);
-	exit(EXIT_FAILURE);}
 
 #ifndef NO_SOCKET
 #include <sys/stat.h>
 #include <pwd.h>
 #include <grp.h>
+#include <sys/ioctl.h>
 #define LISTEN_BACKLOG 32
 #define MAX_FDS 40
 #define D_SOCK 0
 #define D_ADM_SOCK 1
+#define D_ACPID_SOCK 2
 const char* daemon_socket_user= 	"root";
 const char* daemon_socket_group=	"users";
 const int   daemon_socket_perm=		0660;
@@ -413,7 +417,7 @@ const char* daemon_adm_sock_path="./lpmd_adm.socket";
 int daemon_adm_sock=-2;
 struct sockaddr_un daemon_adm_sock_addr;
 
-struct pollfd fds[MAX_FDS];
+struct pollfd fds[MAX_FDS] = {0};
 int poll_timeout = 1000 * loopInterval;
 int nfds = 0;
 int current_nfds = 0;
@@ -437,6 +441,7 @@ chown_custom(const char* path, const char* user, const char* group){
 
 void
 daemon_sock_create(){
+	int on=1;
 	/* check if file exist */
 	if(access(daemon_sock_path,F_OK) == 0 )
 		error_errno_msg_exit(
@@ -449,15 +454,15 @@ daemon_sock_create(){
 		error_errno_msg_exit("couldn't open socket", daemon_sock_path);
 	
 	daemon_sock_addr.sun_family=AF_UNIX;
+
+	/* make socket non blocking */
+	if( ioctl( daemon_sock, FIONBIO, (char *)&on) < 0 )
+		error_errno_msg_exit("ioctl() failed to set socket non blocking","");
 	
 	strncpy(
 		daemon_sock_addr.sun_path,
 		daemon_sock_path,
 		sizeof(daemon_sock_addr.sun_path)-1);
-//	unlink(daemon_sock_addr.sun_path);
-//	if( unlink(daemon_sock_addr.sun_path) == -1)
-//	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
-//		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);
 //	
 	if( bind(
 			daemon_sock,
@@ -493,10 +498,12 @@ daemon_sock_close(){
 		error_errno_msg_exit("couldn't close socket", daemon_sock_path);
 	daemon_sock=-1;
 	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
-		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);}
+		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);
+	nfds--;}
 
 void
 daemon_adm_sock_create(){
+	int on=1;
 	/* check if file exist */
 	if(access(daemon_adm_sock_path,F_OK) == 0 )
 		error_errno_msg_exit(
@@ -509,6 +516,10 @@ daemon_adm_sock_create(){
 		error_errno_msg_exit("couldn't open socket", daemon_adm_sock_path);
 	
 	daemon_adm_sock_addr.sun_family=AF_UNIX;
+
+	/* make socket non blocking */
+	if( ioctl( daemon_sock, FIONBIO, (char *)&on) < 0 )
+		error_errno_msg_exit("ioctl() failed to set socket non blocking","");
 	
 	strncpy(
 		daemon_adm_sock_addr.sun_path,
@@ -537,8 +548,8 @@ daemon_adm_sock_create(){
 	
 	if( listen(daemon_adm_sock, LISTEN_BACKLOG) == -1 )
 		error_errno_msg_exit("listen command failed",NULL);
-	fds[D_SOCK].fd=daemon_sock;
-	fds[D_SOCK].events=POLLIN;
+	fds[D_ADM_SOCK].fd=daemon_adm_sock;
+	fds[D_ADM_SOCK].events=POLLIN;
 	nfds++;}
 
 void
@@ -552,14 +563,15 @@ daemon_adm_sock_close(){
 		error_errno_msg_exit("couldn't close socket", daemon_adm_sock_path);
 	daemon_adm_sock=-1;
 	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
-		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);}
+		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);
+	nfds--;}
 
 
-void
-poll_daemon_sockets(){
-	if( poll( fds, nfds, poll_timeout) < 0 )
-		error_errno_msg_exit("poll failed", NULL);
-}
+//void
+//poll_daemon_sockets(){
+//	if( poll( fds, nfds, poll_timeout) < 0 )
+//		error_errno_msg_exit("poll failed", NULL);
+//}
 #endif
 
 
@@ -698,6 +710,16 @@ lid_state_handler(){
 			action_lid_close();}}
 
 void
+print_time_no_newline(){
+	time_t timer;
+	char buffer[26];
+	struct tm* tm_info;
+	timer = time(NULL);
+	tm_info = localtime(&timer);
+	strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
+	printf("%s ", buffer);}
+
+void
 updateChargerState(){
 	if(acpid_connected) return; // skip primitive check if acpid is avaliable
 #ifdef DEBUG
@@ -749,8 +771,9 @@ connect_to_acpid(){
 		return(1);}
 	fprintf(stderr, "connected to acpid at %s\n", acpid_sock_path);
 	acpid_connected=1;
-	FD_ZERO(&fd_set_acpid);
-	FD_SET(fd_acpid, &fd_set_acpid); 
+	fds[D_ACPID_SOCK].fd=fd_acpid;
+	fds[D_ACPID_SOCK].events=POLLIN;
+	nfds++;
 	return(0);}
 void
 sock_print(){
@@ -765,22 +788,24 @@ sock_print(){
 void
 specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 		int i=0;
-		puts(acpidEvent[0]);
+#ifdef DEBUG
+		printf("DEBUG specific_events() handles %s\n", acpidEvent[0]);
+#endif
 		//for(int i=0; i<ACPID_EV_MAX; i++){
-		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN-1 )){
+		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){
 			i=atoi(acpidEvent[3]);
 			printf("charger state %d\n", i);
 			if(i != chargerConnected){
 				chargerConnected=i;
 				chargerChangedState();}}
-		if( !strncmp("button/lid", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN-1 ) && 
-			!strncmp("LID", acpidEvent[1] ,ACPID_STRCMP_MAX_LEN-1 )){
+		if( !strncmp("button/lid", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN ) && 
+			!strncmp("LID", acpidEvent[1] ,ACPID_STRCMP_MAX_LEN )){
 			
 			puts(acpidEvent[1]);
 			puts(acpidEvent[2]);
-			if(!strncmp("open", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN-1 )){
+			if(!strncmp("open", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN )){
 				i=1;}
-			if(!strncmp("close", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN-1 )){
+			if(!strncmp("close", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN)){
 				i=0;}
 			if(i!=lid_state){
 				lid_state_changed=1;}
@@ -797,55 +822,69 @@ handle_read_from_acpid_sock(){
 		for(int i=0; buf[i]!='\0'; i++){
 			if(buf[i]=='\n')
 				buf[i]='\0';}
+#ifdef DEBUG
+		printf("acpid event\n");
+#endif
 		memset(acpidEvent, 0, sizeof(acpidEvent));
 		token = strtok_r(buf, " ", &strtok_saveptr);
 		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
 			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
-			printf("%d \"%s\" len:%lo\n",i,
+#ifdef DEBUG
+			printf("\t%d \"%s\" len:%lo\n",i,
 				acpidEvent[i],
 				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
+#endif
 			token = strtok_r(NULL, " ", &strtok_saveptr);}
 		specific_events(acpidEvent);}
+	else if( numRead <= 0 ){
+		if(acpid_connected){
+			fds[D_ACPID_SOCK].fd=0;
+			fds[D_ACPID_SOCK].events=0;
+			nfds--;
+			fprintf(stderr, "lost connection to acpid\n");}
+		if(close(fd_acpid)){
+			perror("socket close error");}
+		acpid_connected=0;
+		fd_acpid=-1;}
 	return(numRead);}
 
 #define ACPID_FDSS 32
 void
 handle_acpid_events(){
-	int numRead=-2;
-	int sel_rc=-1;
-	// reading or setting tv_sec value is required here
-	// without it
-	select_timeout.tv_sec=loopInterval;
-	if(fd_acpid==-1) return; // exit if fd is unset
-	fd_set_acpid_ready=fd_set_acpid;
-	sel_rc = select(ACPID_FDSS, &fd_set_acpid_ready,NULL,NULL, &select_timeout);
-	switch(sel_rc){
+	int rc=-1;
+	int current_nfds=0;
+	if( nfds == 0 ) return; // there are no active FDs
+	if( nfds <= 0 ) {
+		fprintf(stderr, "ERROR nfds value is negative. exitting\n");
+		exit(EXIT_FAILURE);}
+#ifdef DEBUG
+	printf("running poll() nfds siez %d\n", nfds);
+#endif
+	current_nfds = nfds;
+	rc = poll(fds, nfds, poll_timeout);
+	switch(rc){
 		case(0): // timeout
 #ifdef DEBUG
-			puts("DEBUG select timeout");
+			puts("DEBUG poll timeout");
 #endif
 			return;
 		case(-1): //error
 #ifdef DEBUG
-			puts("DEBUG select error");
+			puts("DEBUG poll error");
 #endif
 			break;
 		default:
 #ifdef DEBUG
-			puts("DEBUG select read");
+			puts("DEBUG poll rw");
 #endif
-			for(int i=0; i<ACPID_FDSS;i++){
-				if(FD_ISSET(i, &fd_set_acpid_ready) && i==fd_acpid){
-					numRead = handle_read_from_acpid_sock();
-					FD_CLR(i, &fd_set_acpid_ready);}}
+			for(int i=0; i < current_nfds ;i++){
+				if( fds[i].revents == 0 )
+					continue;
+				if( fds[i].revents != POLLIN )
+					printf("ERROR %d %d\n", i, fds[i].revents);
+				if( i == D_ACPID_SOCK && fds[i].revents == POLLIN ) {
+					handle_read_from_acpid_sock();}}
 	}
-	if( numRead <=0 || sel_rc == -1 ){
-		if(acpid_connected)
-			fprintf(stderr, "lost connection to acpid\n");
-		if(close(fd_acpid)){
-			perror("socket close error");}
-		acpid_connected=0;
-		fd_acpid=-1;}
 	memset(buf, 0, sizeof(buf));
 }
 void
@@ -887,17 +926,18 @@ main(){
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
 #ifndef NO_SOCKET
-	memset(fds, 0 , sizeof(fds));
+	//memset(fds, 0 , sizeof(fds));
 	daemon_sock_create();
 	daemon_adm_sock_create();
 	setup_sigaction();
 #endif
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
+			puts("DEBUG main loop start\n");
+			printf("nfds %d\n", nfds);
 #else
 		for(;;){
 #endif
-			puts("DEBUG main loop start\n");
 			checkSysDirs();
 			//sock_print();
 			reconnect_to_acpid();
@@ -905,13 +945,13 @@ main(){
 			lid_state_handler();
 			updatePowerPerc();
 			//updatePowerPerc_reuse_fd();
-			reconnect_to_acpid();
 			updateChargerState();
 			checkForLowPower();
 			//puts("DEBUG main loop end\n");
 #ifdef DEBUG_PRINT
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 #endif
+			print_time_no_newline();
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 			if(!acpid_connected)
 				sleep(loopInterval);

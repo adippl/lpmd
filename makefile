@@ -7,7 +7,9 @@ else
  endif
 endif
 
-CC = gcc 
+ifeq ($(CC),)
+ CC := cc 
+endif
 ifeq ($(CFLAGS),)
  CFLAGS := -Wall -pedantic -O2 -g 
 endif
