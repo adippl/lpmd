@@ -11,7 +11,7 @@ ifeq ($(CC),)
  CC := cc 
 endif
 ifeq ($(CFLAGS),)
- CFLAGS := -Wall -pedantic -O2 -g 
+ CFLAGS := -Wall -Wextra -pedantic -O2 -g 
 endif
 
 lpmd: lpmd.c

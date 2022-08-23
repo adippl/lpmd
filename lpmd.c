@@ -516,7 +516,7 @@ daemon_adm_sock_create(){
 		error_errno_msg_exit("couldn't open socket", daemon_adm_sock_path);
 	
 	daemon_adm_sock_addr.sun_family=AF_UNIX;
-
+	
 	/* make socket non blocking */
 	if( ioctl( daemon_sock, FIONBIO, (char *)&on) < 0 )
 		error_errno_msg_exit("ioctl() failed to set socket non blocking","");
@@ -525,11 +525,7 @@ daemon_adm_sock_create(){
 		daemon_adm_sock_addr.sun_path,
 		daemon_adm_sock_path,
 		sizeof(daemon_adm_sock_addr.sun_path)-1);
-//	unlink(daemon_adm_sock_addr.sun_path);
-//	if( unlink(daemon_adm_sock_addr.sun_path) == -1)
-//	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
-//		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);
-//	
+	
 	if( bind(
 			daemon_adm_sock,
 			(struct sockaddr *)&daemon_adm_sock_addr,
@@ -567,11 +563,31 @@ daemon_adm_sock_close(){
 	nfds--;}
 
 
-//void
-//poll_daemon_sockets(){
-//	if( poll( fds, nfds, poll_timeout) < 0 )
-//		error_errno_msg_exit("poll failed", NULL);
-//}
+#define DYN_FDS_MIN 3
+#define DYN_FDS_MAX 30
+int
+fds_append(int fd, int event){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( fds[i].fd == 0 ){
+			fds[i].fd=fd;
+			fds[i].events=event;
+			fds[i].revents=0;
+			nfds++;
+			return(0);}}
+	return(1);}
+
+int
+fds_remove(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( fds[i].fd == fd ){
+			fds[i].fd=0;
+			fds[i].events=0;
+			fds[i].revents=0;
+			nfds--;
+			return(0);}}
+	return(1);}
+
+
 #endif
 
 
@@ -587,14 +603,18 @@ lpmd_clanup(){
 #include <signal.h>
 void
 sigterm_handler(int signal, siginfo_t *info, void *_unused){
-	fprintf(stderr, "Received SIGTERM from process with pid = %u\n",
-		info->si_pid);
+	fprintf(stderr, "Received SIGTERM from process with pid = %u (%d %p)\n",
+		info->si_pid,
+		signal,
+		_unused);
 	lpmd_clanup();
 	exit(0);}
 void
 sigint_handler(int signal, siginfo_t *info, void *_unused){
-	fprintf(stderr, "Received SIGINT from process with pid = %u\n",
-		info->si_pid);
+	fprintf(stderr, "Received SIGINT from process with pid = %u (%d %p)\n",
+		info->si_pid,
+		signal,
+		_unused);
 	lpmd_clanup();
 	exit(0);}
 
@@ -848,9 +868,62 @@ handle_read_from_acpid_sock(){
 		fd_acpid=-1;}
 	return(numRead);}
 
-#define ACPID_FDSS 32
+int
+generic_socket_read(){
+	int numRead=-2;
+	char* strtok_saveptr=NULL;
+	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
+	char* token=NULL;
+	if((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
+		for(int i=0; buf[i]!='\0'; i++){
+			if(buf[i]=='\n')
+				buf[i]='\0';}
+#ifdef DEBUG
+		printf("acpid event\n");
+#endif
+		memset(acpidEvent, 0, sizeof(acpidEvent));
+		token = strtok_r(buf, " ", &strtok_saveptr);
+		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
+			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
+#ifdef DEBUG
+			printf("\t%d \"%s\" len:%lo\n",i,
+				acpidEvent[i],
+				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
+#endif
+			token = strtok_r(NULL, " ", &strtok_saveptr);}
+		specific_events(acpidEvent);}
+	else if( numRead <= 0 ){
+		if(acpid_connected){
+			fds[D_ACPID_SOCK].fd=0;
+			fds[D_ACPID_SOCK].events=0;
+			nfds--;
+			fprintf(stderr, "lost connection to acpid\n");}
+		if(close(fd_acpid)){
+			perror("socket close error");}
+		acpid_connected=0;
+		fd_acpid=-1;}
+	return(numRead);}
+
+
 void
-handle_acpid_events(){
+accept_connection(int fd){
+	int new_fd=0;
+	if( (new_fd = accept(fd, NULL, NULL)) < 0 ){
+		if(errno != EWOULDBLOCK){
+			error_errno_msg_exit("connection accept() failed","");
+		fprintf(stderr, "ERR failed to accept() connetion %d\n", new_fd);}}
+	if( fds_append( new_fd, POLLIN ))
+		fprintf(stderr, "ERR failed to accept() connetion FDS full\n");}
+
+void
+cleanup_connection(int fd_pos){
+	fds[fd_pos].fd=0;
+	fds[fd_pos].events=0;
+	fds[fd_pos].revents=0;
+	nfds--;}
+
+void
+poll_fds(){
 	int rc=-1;
 	int current_nfds=0;
 	if( nfds == 0 ) return; // there are no active FDs
@@ -858,35 +931,52 @@ handle_acpid_events(){
 		fprintf(stderr, "ERROR nfds value is negative. exitting\n");
 		exit(EXIT_FAILURE);}
 #ifdef DEBUG
-	printf("running poll() nfds siez %d\n", nfds);
+	printf("running poll() nfds size %d\n", nfds);
 #endif
 	current_nfds = nfds;
 	rc = poll(fds, nfds, poll_timeout);
 	switch(rc){
-		case(0): // timeout
+	case(0): // timeout
 #ifdef DEBUG
-			puts("DEBUG poll timeout");
+		puts("DEBUG poll timeout");
 #endif
-			return;
-		case(-1): //error
+		return;
+	case(-1): //error
 #ifdef DEBUG
-			puts("DEBUG poll error");
+		puts("DEBUG poll error");
 #endif
-			break;
-		default:
+		break;
+	default:
 #ifdef DEBUG
-			puts("DEBUG poll rw");
+		puts("DEBUG poll rw");
 #endif
-			for(int i=0; i < current_nfds ;i++){
-				if( fds[i].revents == 0 )
-					continue;
-				if( fds[i].revents != POLLIN )
-					printf("ERROR %d %d\n", i, fds[i].revents);
-				if( i == D_ACPID_SOCK && fds[i].revents == POLLIN ) {
-					handle_read_from_acpid_sock();}}
+		for(int i=0; i < current_nfds ;i++){
+			if( fds[i].revents == 0 )
+				continue;
+			if( fds[i].revents != POLLIN )
+				printf("ERROR %d %d\n", i, fds[i].revents);
+			if( fds[i].revents == POLLHUP ){
+#ifdef DEBUG
+				printf("lost connection on %d fd\n", fds[i].fd);
+#endif
+				cleanup_connection(i);
+				continue;}
+			if( i == D_ACPID_SOCK && fds[i].revents == POLLIN ) {
+				handle_read_from_acpid_sock();
+				continue;}
+			if( i == D_ADM_SOCK || i == D_SOCK ){
+				if( fds[i].revents == POLLIN ){
+					accept_connection( fds[i].fd );
+					continue;}}
+			if( i>=DYN_FDS_MIN && i<=DYN_FDS_MAX ){
+				if( fds[i].events == POLLIN ){
+					printf("something on %d\n", fds[i].fd);
+					continue;}}
+		}
 	}
 	memset(buf, 0, sizeof(buf));
 }
+
 void
 reconnect_to_acpid(){
 	if(!acpid_connected && !access(acpid_sock_path, R_OK)){
@@ -941,7 +1031,7 @@ main(){
 			checkSysDirs();
 			//sock_print();
 			reconnect_to_acpid();
-			handle_acpid_events();
+			poll_fds();
 			lid_state_handler();
 			updatePowerPerc();
 			//updatePowerPerc_reuse_fd();
