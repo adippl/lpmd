@@ -23,8 +23,8 @@ const char* hibernate_wake="hibernate_wake";
 
 const char* client_idle_action="client_idle_action";
 #define CLIENT_IDLE_ACTION 30
-const char* client_notifu_daemon_about_idle="client_notifu_daemon_about_idle";
-#define CLIENT_NOTIFU_DAEMON_ABOUT_IDLE 31
+const char* client_notify_daemon_about_idle="client_notify_daemon_about_idle";
+#define CLIENT_NOTIFY_DAEMON_ABOUT_IDLE 31
 const char* client_ask_for_lock_failed="client_ask_for_lock_failed";
 #define CLIENT_ASK_FOR_LOCK_FAILED 32
 
@@ -43,11 +43,11 @@ const char* daemon_ask_for_screen_locks="daemon_ask_for_screen_locks";
 const char* daemon_exit_goodbye="daemon_exit_goodbye";
 #define DAEMON_EXIT_GOODBYE 202
 const char* daemon_action_success="daemon_action_success";
-#define daemon_action_success 203
+#define DAEMON_ACTION_SUCCESS 203
 const char* daemon_action_failure="daemon_action_failure";
-#define daemon_action_failure 204
+#define DAEMON_ACTION_FAILURE 204
 const char* daemon_action_refuse="daemon_action_refuse";
-#define daemon_action_refuse 205
+#define DAEMON_ACTION_REFUSE 205
 
 
 

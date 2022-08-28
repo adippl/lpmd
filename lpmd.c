@@ -388,17 +388,16 @@ const char* daemon_socket_user= 	"root";
 const char* daemon_socket_group=	"users";
 const int   daemon_socket_perm=		0660;
 //const char* daemon_sock_path="./lpmd.socket";
-int daemon_sock=-2;
 struct sockaddr_un daemon_sock_addr;
 
 const char* daemon_adm_socket_user= 	"root";
 const char* daemon_adm_socket_group=	"wheel";
 const int   daemon_adm_socket_perm=		0660;
 //const char* daemon_adm_sock_path="./lpmd_adm.socket";
-int daemon_adm_sock=-2;
 struct sockaddr_un daemon_adm_sock_addr;
 
 struct pollfd fds[MAX_FDS] = {0};
+int8_t fd_adm_sock[MAX_FDS] = {0};
 int poll_timeout = 1000 * loopInterval;
 int nfds = 0;
 int c_nfds = MAX_FDS;
@@ -424,6 +423,7 @@ chown_custom(const char* path, const char* user, const char* group){
 void
 daemon_sock_create(){
 	int on=1;
+	int daemon_sock=0;
 	/* check if file exist */
 	if(access(daemon_sock_path,F_OK) == 0 )
 		error_errno_msg_exit(
@@ -471,21 +471,22 @@ daemon_sock_create(){
 
 void
 daemon_sock_close(){
-	if(daemon_sock == -2)
+	if( fds[D_SOCK].fd == -2)
 		return;
 	// TODO daemon_send_goodbye_msg_to_clients
-	if(shutdown(daemon_sock, SHUT_RDWR) == -1)
+	if( shutdown( fds[D_SOCK].fd, SHUT_RDWR) == -1)
 		error_errno_msg_exit("couldn't shutdown socket", daemon_sock_path);
-	if(close(daemon_sock))
+	if( close( fds[D_SOCK].fd ))
 		error_errno_msg_exit("couldn't close socket", daemon_sock_path);
-	daemon_sock=-1;
+	fds[D_SOCK].fd=-1;
 	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
 		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);
-	nfds--;}
+	}
 
 void
 daemon_adm_sock_create(){
 	int on=1;
+	int daemon_adm_sock=0;
 	/* check if file exist */
 	if(access(daemon_adm_sock_path,F_OK) == 0 )
 		error_errno_msg_exit(
@@ -500,7 +501,7 @@ daemon_adm_sock_create(){
 	daemon_adm_sock_addr.sun_family=AF_UNIX;
 	
 	/* make socket non blocking */
-	if( ioctl( daemon_sock, FIONBIO, (char *)&on) < 0 )
+	if( ioctl( daemon_adm_sock, FIONBIO, (char *)&on) < 0 )
 		error_errno_msg_exit("ioctl() failed to set socket non blocking","");
 	
 	strncpy(
@@ -532,14 +533,14 @@ daemon_adm_sock_create(){
 
 void
 daemon_adm_sock_close(){
-	if(daemon_adm_sock == -2)
+	if( fds[D_ACPID_SOCK].fd == -2)
 		return;
 	// TODO daemon_send_goodbye_msg_to_clients
-	if(shutdown(daemon_adm_sock, SHUT_RDWR) == -1)
+	if( shutdown( fds[D_ACPID_SOCK].fd, SHUT_RDWR) == -1)
 		error_errno_msg_exit("couldn't shutdown socket", daemon_adm_sock_path);
-	if(close(daemon_adm_sock))
+	if( close( fds[D_ACPID_SOCK].fd))
 		error_errno_msg_exit("couldn't close socket", daemon_adm_sock_path);
-	daemon_adm_sock=-1;
+	fds[D_ACPID_SOCK].fd =- 1;
 	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
 		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);
 	nfds--;}
@@ -785,6 +786,51 @@ sock_print(int fd){
 		if( write(STDIN_FILENO, buf, numRead) != numRead) {
 			fprintf(stderr,"partial/failed write");}}}
 
+void
+basic_send_msg(int conn_fd, const char* msg){
+	size_t msg_size = strnlen(msg, MSG_MAX_LEN);
+	ssize_t write_size = write( conn_fd, msg, msg_size );
+	if( msg_size != (size_t)write_size){
+#ifdef DEBUG
+		printf(" %ld %ld\n", msg_size, write_size);
+#endif
+		error_errno_msg_exit("couldn't write full message to socket","");}
+	write_size = write( conn_fd, "\n", 1 );
+}
+
+void
+handle_clients(int i){
+	int numRead=-1;
+	int fd = fds[i].fd;
+	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		fprintf( stderr, "adminsock %d\n", fd_adm_sock[fd]);
+		for( int i=0; i<MSG_MAX_LEN; i++ ){
+			if( buf[i] == '\n' )
+				buf[i] = '\0';}}
+		if( !strncmp( buf, client_suspend_ask, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED FOR SUSPEND\n");
+			if( !fd_adm_sock[fd]){
+				basic_send_msg(fds[i].fd, daemon_action_refuse);}
+			else{
+				//TODO suspend
+				basic_send_msg(fds[i].fd, daemon_action_success);}
+				}
+		if( !strncmp( buf, client_hibernate_ask, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED FOR HINERNATION\n");
+			if( !fd_adm_sock[fd]){
+				basic_send_msg(fds[i].fd, daemon_action_refuse);
+				}
+			else{
+				//TODO hibernate
+				basic_send_msg(fds[i].fd, daemon_action_success);}
+				}
+		if( !strncmp( buf, client_notify_daemon_about_idle, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT NOTIFIED ABOUT IDLE DESKTOP\n");
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			//TODO do something
+			}
+	memset(buf,0,BUF_SIZE);}
+
 #define ACPID_EV_MAX 5
 void
 specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
@@ -851,14 +897,21 @@ handle_read_from_acpid_sock(){
 
 
 void
-accept_connection(int fd){
+accept_connection(int fd, int adm){
 	int new_fd=0;
 	if( (new_fd = accept(fd, NULL, NULL)) < 0 ){
-		if(errno != EWOULDBLOCK){
+		if(errno != EWOULDBLOCK)
 			error_errno_msg_exit("connection accept() failed","");
-		fprintf(stderr, "ERR failed to accept() connetion %d\n", new_fd);}}
-	if( fds_append( new_fd, POLLIN ))
-		fprintf(stderr, "ERR failed to accept() connetion FDS full\n");}
+		fprintf(stderr, "ERR failed to accept() connetion %d\n", new_fd);
+		return;}
+	if( fds_append( new_fd, POLLIN )){
+		fprintf(stderr, "ERR failed to accept() connetion FDS full\n");
+		return;}
+	if( adm ){
+		fd_adm_sock[ new_fd ] = 1;
+		printf("efsjeofjseofijspoeifjp %d %d\n", new_fd, fd_adm_sock[new_fd] );;
+		}
+		}
 
 void
 cleanup_connection(int fd_pos){
@@ -866,6 +919,7 @@ cleanup_connection(int fd_pos){
 	fds[fd_pos].fd=-1;
 	fds[fd_pos].events=0;
 	fds[fd_pos].revents=0;
+	fd_adm_sock[fd_pos]=0;
 	nfds--;}
 
 void
@@ -923,7 +977,7 @@ poll_fds(){
 			/* handle ctrl socket incomming connections */
 			if( i == D_ADM_SOCK || i == D_SOCK ){
 				if( fds[i].revents == POLLIN ){
-					accept_connection( fds[i].fd );
+					accept_connection( fds[i].fd, i == D_ADM_SOCK ? 1:0 );
 					continue;}}
 			/* handle connection to lpmctl */
 			if( i>=DYN_FDS_MIN && i<=DYN_FDS_MAX && fds[i].events == POLLIN ){
@@ -937,7 +991,8 @@ poll_fds(){
 #ifdef DEBUG
 					printf("something on %d arrpos %d\n", fds[i].fd, i);
 #endif
-					sock_print(fds[i].fd);
+					//sock_print(fds[i].fd);
+					handle_clients(i);
 					if( (fds[i].revents & POLLHUP) == POLLHUP ){
 #ifdef DEBUG
 						printf("POLLHUP on %d arrpos %d\n", fds[i].fd, i);

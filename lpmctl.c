@@ -7,6 +7,9 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 
+#include <poll.h>
+struct pollfd fds[1] = {0};
+
 
 int mode_daemon=0;
 int action=0;
@@ -29,8 +32,7 @@ connect_to_daemon(){
 				sock_path = daemon_adm_sock_path;
 				break;
 			default:
-				sock_path = daemon_sock_path;}
-		sock_path = daemon_adm_sock_path;}
+				sock_path = daemon_sock_path;}}
 	fprintf(stderr, "connecting to %s\n", sock_path);
 	memset(buf,0,BUF_SIZE);
 	if( (conn_fd=socket(AF_UNIX, SOCK_STREAM, 0)) == -1 )
@@ -66,10 +68,10 @@ parse_args(int argc, char** argv){
 		if( !strncmp( &argv[1][1], "hibernate", MSG_MAX_LEN) )
 			action = CLIENT_HIBERNATE_ASK;
 		
-		if( !strncmp( &argv[1][1], client_idle_action, MSG_MAX_LEN) )
-			action = CLIENT_IDLE_ACTION;
+		if( !strncmp( &argv[1][1], client_notify_daemon_about_idle, MSG_MAX_LEN) )
+			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
 		if( !strncmp( &argv[1][1], "client_idle", MSG_MAX_LEN) )
-			action = CLIENT_IDLE_ACTION;
+			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
 		
 		if( !strncmp( &argv[1][1], "daemon", MSG_MAX_LEN) )
 			mode_daemon = 1;}
@@ -90,12 +92,57 @@ basic_send_msg(const char* msg){
 	}
 
 void
-wait_for_reply(); //TODO
+sock_print(int fd){
+	int numRead=-1;
+	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		if( write(STDIN_FILENO, buf, numRead) != numRead) {
+			fprintf(stderr,"partial/failed write");}}}
+
+void
+handle_clients(int fd){
+	int numRead=-1;
+	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		for( int i=0; i<MSG_MAX_LEN; i++ ){
+			if( buf[i] == '\n' )
+				buf[i] = '\0';}}
+		if( !strncmp( buf, daemon_action_success, MSG_MAX_LEN)){
+			fprintf(stderr, "action success\n");
+			close(conn_fd);
+			exit(EXIT_SUCCESS);
+				}
+		if( !strncmp( buf, daemon_action_refuse, MSG_MAX_LEN)){
+			fprintf(stderr, "action refused\n");
+			exit(EXIT_FAILURE);
+				}
+		if( !strncmp( buf, daemon_action_failure, MSG_MAX_LEN)){
+			fprintf(stderr, "action failed");
+			exit(EXIT_FAILURE);
+				}
+	memset(buf,0,BUF_SIZE);}
+
+void
+wait_for_reply(){
+	int rc = poll(fds, 1, 1000);
+	switch(rc){
+	case(0): // timeout
+		printf("Timed out while waiting for reply");
+		exit(EXIT_FAILURE);
+	case(-1): //error
+		printf("Poll failure for reply\n");
+		exit(EXIT_FAILURE);
+	default:
+		if( (fds[0].revents & POLLIN) == POLLIN )
+			handle_clients( fds[0].fd );}
+		if( (fds[0].revents & POLLIN) != POLLIN )
+			printf("connection error\n");
+			}
 
 int
 main(int argc, char** argv){
 	parse_args(argc, argv);
 	connect_to_daemon();
+	fds[0].fd = conn_fd;
+	fds[0].events = POLLIN;
 	
 	printf("%d\n", mode_daemon);
 	if( mode_daemon ){
@@ -109,13 +156,12 @@ main(int argc, char** argv){
 		case CLIENT_HIBERNATE_ASK:
 			basic_send_msg( client_hibernate_ask );
 			break;
-		case CLIENT_NOTIFU_DAEMON_ABOUT_IDLE:
-			basic_send_msg( client_notifu_daemon_about_idle );
+		case CLIENT_NOTIFY_DAEMON_ABOUT_IDLE:
+			basic_send_msg( client_notify_daemon_about_idle );
 			break;
 		}
-		printf("client mode not implemented\n");
-		exit(EXIT_FAILURE);
-		//wait_for_reply()
+		//sock_print(conn_fd);
+		wait_for_reply();
 		}
 	}
 
