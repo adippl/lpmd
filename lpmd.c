@@ -29,6 +29,7 @@
 #include <sys/select.h>
 #include <poll.h>
 
+#include "lpmd.h"
 #include "lpmd_messages.h"
 
 #define SSTR 64
@@ -89,6 +90,7 @@ const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_tur
 #define GOV_POWERSAVE 0
 #define GOV_PERFORMANCE 1
 #define GOV_ONDEMAND 1
+void setGovernor(int governor);
 static const char *governor_string[] = { 
 	"powersave", "performance", "ondemand", };
 int cpu_boost_on=0;
@@ -115,7 +117,6 @@ int lid_state_changed=1;
 
 
 /* connection to acpid*/
-#define BUF_SIZE 512
 const char acpid_sock_path[]="/run/acpid.socket";
 char buf[BUF_SIZE];
 int fd_acpid=-1;
@@ -148,24 +149,6 @@ action_charger_disconnected(){
 	cpu_boost_control(cpu_boost_off);
 	lowBatWarning_warned=0;}
 
-
-void
-error_errno_msg_exit(const char* msg1, const char* msg2){
-	if(msg2)
-		snprintf(
-			msg_buff,
-			msg_buff_size,
-			"EXIT_ERROR %s %s",
-			msg1,
-			msg2);
-	else
-		snprintf(
-			msg_buff,
-			msg_buff_size,
-			"EXIT_ERROR %s",
-			msg1);
-	perror(msg_buff);
-	exit(EXIT_FAILURE);}
 
 
 int
@@ -404,16 +387,14 @@ get_lid_stat_from_sys(){
 const char* daemon_socket_user= 	"root";
 const char* daemon_socket_group=	"users";
 const int   daemon_socket_perm=		0660;
-//const char* daemon_sock_path="/run/lpmd.socket";
-const char* daemon_sock_path="./lpmd.socket";
+//const char* daemon_sock_path="./lpmd.socket";
 int daemon_sock=-2;
 struct sockaddr_un daemon_sock_addr;
 
 const char* daemon_adm_socket_user= 	"root";
 const char* daemon_adm_socket_group=	"wheel";
 const int   daemon_adm_socket_perm=		0660;
-//const char* daemon_adm_sock_path="/run/lpmd.socket";
-const char* daemon_adm_sock_path="./lpmd_adm.socket";
+//const char* daemon_adm_sock_path="./lpmd_adm.socket";
 int daemon_adm_sock=-2;
 struct sockaddr_un daemon_adm_sock_addr;
 
@@ -856,26 +837,6 @@ handle_read_from_acpid_sock(){
 #endif
 			token = strtok_r(NULL, " ", &strtok_saveptr);}
 		specific_events(acpidEvent);}
-	else if( numRead <= 0 ){
-		if(acpid_connected){
-			fds[D_ACPID_SOCK].fd=0;
-			fds[D_ACPID_SOCK].events=0;
-			nfds--;
-			fprintf(stderr, "lost connection to acpid\n");}
-		if(close(fd_acpid)){
-			perror("socket close error");}
-		acpid_connected=0;
-		fd_acpid=-1;}
-	return(numRead);}
-
-int
-generic_socket_read(){
-	int numRead=-2;
-	char* strtok_saveptr=NULL;
-	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
-	char* token=NULL;
-	if((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
-		}
 	else if( numRead <= 0 ){
 		if(acpid_connected){
 			fds[D_ACPID_SOCK].fd=0;

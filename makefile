@@ -14,10 +14,14 @@ ifeq ($(CFLAGS),)
  CFLAGS := -Wall -Wextra -pedantic -O2 -g 
 endif
 
-lpmd: lpmd.c
-	$(CC) $(CFLAGS) lpmd.c -o lpmd
-debug: lpmd.c
-	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c -o lpmd
+lpmd: lpmd.c lpmctl.c error.c
+	$(CC) $(CFLAGS) -c error.c
+	$(CC) $(CFLAGS) lpmd.c error.o -o lpmd
+	$(CC) $(CFLAGS) lpmctl.c error.o -o lpmctl
+debug: lpmd.c lpmctl.c error.c
+	$(CC) $(CFLAGS) -g -DDEBUG -c error.c
+	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c error.o -o lpmd
+	$(CC) $(CFLAGS) -g -DDEBUG lpmctl.c error.o -o lpmctl
 clean:
 	rm -f lpmd lpmd-profiler gmon.out
 install: lpmd
