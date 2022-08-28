@@ -420,6 +420,7 @@ struct sockaddr_un daemon_adm_sock_addr;
 struct pollfd fds[MAX_FDS] = {0};
 int poll_timeout = 1000 * loopInterval;
 int nfds = 0;
+int c_nfds = MAX_FDS;
 int current_nfds = 0;
 int current_size = 0;
 
@@ -568,7 +569,7 @@ daemon_adm_sock_close(){
 int
 fds_append(int fd, int event){
 	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
-		if( fds[i].fd == 0 ){
+		if( fds[i].fd == 0 || fds[i].fd == -1 ){
 			fds[i].fd=fd;
 			fds[i].events=event;
 			fds[i].revents=0;
@@ -795,15 +796,14 @@ connect_to_acpid(){
 	fds[D_ACPID_SOCK].events=POLLIN;
 	nfds++;
 	return(0);}
+
 void
-sock_print(){
+sock_print(int fd){
 	int numRead=-1;
-	while ((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0) {
-		if (write(STDIN_FILENO, buf, numRead) != numRead) {
-		  fprintf(stderr,"partial/failed write");
-		}
-	}
-}
+	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		if( write(STDIN_FILENO, buf, numRead) != numRead) {
+			fprintf(stderr,"partial/failed write");}}}
+
 #define ACPID_EV_MAX 5
 void
 specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
@@ -875,23 +875,7 @@ generic_socket_read(){
 	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
 	char* token=NULL;
 	if((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
-		for(int i=0; buf[i]!='\0'; i++){
-			if(buf[i]=='\n')
-				buf[i]='\0';}
-#ifdef DEBUG
-		printf("acpid event\n");
-#endif
-		memset(acpidEvent, 0, sizeof(acpidEvent));
-		token = strtok_r(buf, " ", &strtok_saveptr);
-		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
-			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
-#ifdef DEBUG
-			printf("\t%d \"%s\" len:%lo\n",i,
-				acpidEvent[i],
-				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
-#endif
-			token = strtok_r(NULL, " ", &strtok_saveptr);}
-		specific_events(acpidEvent);}
+		}
 	else if( numRead <= 0 ){
 		if(acpid_connected){
 			fds[D_ACPID_SOCK].fd=0;
@@ -917,24 +901,30 @@ accept_connection(int fd){
 
 void
 cleanup_connection(int fd_pos){
-	fds[fd_pos].fd=0;
+	close(fds[fd_pos].fd);
+	fds[fd_pos].fd=-1;
 	fds[fd_pos].events=0;
 	fds[fd_pos].revents=0;
 	nfds--;}
 
 void
+zero_fds(){
+	for( int i=DYN_FDS_MIN; i<=DYN_FDS_MAX; i++ ){
+		fds[i].fd=-1;}}
+
+void
 poll_fds(){
 	int rc=-1;
 	int current_nfds=0;
-	if( nfds == 0 ) return; // there are no active FDs
-	if( nfds <= 0 ) {
-		fprintf(stderr, "ERROR nfds value is negative. exitting\n");
-		exit(EXIT_FAILURE);}
-#ifdef DEBUG
-	printf("running poll() nfds size %d\n", nfds);
-#endif
-	current_nfds = nfds;
-	rc = poll(fds, nfds, poll_timeout);
+//	if( nfds == 0 ) return; // there are no active FDs
+//	if( nfds <= 0 ) {
+//		fprintf(stderr, "ERROR nfds value is negative. exitting\n");
+//		exit(EXIT_FAILURE);}
+//#ifdef DEBUG
+//	printf("running poll() nfds size %d\n", nfds);
+//#endif
+	current_nfds = c_nfds;
+	rc = poll(fds, c_nfds, poll_timeout);
 	switch(rc){
 	case(0): // timeout
 #ifdef DEBUG
@@ -953,25 +943,47 @@ poll_fds(){
 		for(int i=0; i < current_nfds ;i++){
 			if( fds[i].revents == 0 )
 				continue;
-			if( fds[i].revents != POLLIN )
-				printf("ERROR %d %d\n", i, fds[i].revents);
-			if( fds[i].revents == POLLHUP ){
+			if( fds[i].revents == POLLHUP || fds[i].revents == POLLERR ){
 #ifdef DEBUG
-				printf("lost connection on %d fd\n", fds[i].fd);
+				printf("lost connection on %d fd, arrpos %d, rev %d\n",
+					fds[i].fd, i, fds[i].revents);
 #endif
 				cleanup_connection(i);
 				continue;}
+			if( fds[i].revents != POLLIN ){
+				printf("ERROR %d %d fd %d\n", i, fds[i].revents ,fds[i].fd);
+				if((fds[i].revents & POLLERR) == POLLERR){
+					printf("POLLERR\n");}
+				}
+			/* handle messages from acpid */
 			if( i == D_ACPID_SOCK && fds[i].revents == POLLIN ) {
 				handle_read_from_acpid_sock();
 				continue;}
+			/* handle ctrl socket incomming connections */
 			if( i == D_ADM_SOCK || i == D_SOCK ){
 				if( fds[i].revents == POLLIN ){
 					accept_connection( fds[i].fd );
 					continue;}}
-			if( i>=DYN_FDS_MIN && i<=DYN_FDS_MAX ){
-				if( fds[i].events == POLLIN ){
-					printf("something on %d\n", fds[i].fd);
-					continue;}}
+			/* handle connection to lpmctl */
+			if( i>=DYN_FDS_MIN && i<=DYN_FDS_MAX && fds[i].events == POLLIN ){
+#ifdef DEBUG
+				printf("  fd=%d; revents: %s%s%s\n", fds[i].fd,
+					(fds[i].revents & POLLIN) ==POLLIN  ? "POLLIN "  : "",
+					(fds[i].revents & POLLHUP)==POLLHUP ? "POLLHUP " : "",
+					(fds[i].revents & POLLERR)==POLLERR ? "POLLERR " : "");
+#endif
+				if( (fds[i].revents & POLLIN) == POLLIN ){
+#ifdef DEBUG
+					printf("something on %d arrpos %d\n", fds[i].fd, i);
+#endif
+					sock_print(fds[i].fd);
+					if( (fds[i].revents & POLLHUP) == POLLHUP ){
+#ifdef DEBUG
+						printf("POLLHUP on %d arrpos %d\n", fds[i].fd, i);
+#endif
+						cleanup_connection(i);}
+					continue;}
+					}
 		}
 	}
 	memset(buf, 0, sizeof(buf));
@@ -1017,6 +1029,7 @@ main(){
 	get_lid_stat_from_sys();
 #ifndef NO_SOCKET
 	//memset(fds, 0 , sizeof(fds));
+	zero_fds();
 	daemon_sock_create();
 	daemon_adm_sock_create();
 	setup_sigaction();
@@ -1029,7 +1042,6 @@ main(){
 		for(;;){
 #endif
 			checkSysDirs();
-			//sock_print();
 			reconnect_to_acpid();
 			poll_fds();
 			lid_state_handler();
