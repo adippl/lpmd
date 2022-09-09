@@ -128,6 +128,7 @@ struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
 void setGovernor(int governor);
 void cpu_boost_control(int i);
 void wall(const char* message);
+void send_msg_to_listening_lpmctl(const char* msg);
 
 void
 action_lid_open(){
@@ -153,40 +154,41 @@ action_charger_disconnected(){
 
 void
 suspend(){
+	send_msg_to_listening_lpmctl(suspend_sleep);
 #ifdef DEBUG
-		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
-		return;}
+	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
+	return;}
 #endif
 #ifndef DEBUG
-		wall(wallSuspendWarning);
-		if(syncBeforeSuspend)
-			sync();
-		fprintf(stderr, "Suspending to memory\n");
-		FILE* f=fopen(powerState, "w");
-		if(f){
-			fprintf(f, "mem");
-			fclose(f);}
-		else{
-			perror(powerState);}}
+	wall(wallSuspendWarning);
+	if(syncBeforeSuspend)
+		sync();
+	fprintf(stderr, "Suspending to memory\n");
+	FILE* f=fopen(powerState, "w");
+	if(f){
+		fprintf(f, "mem");
+		fclose(f);}
+	else{
+		perror(powerState);}}
 #endif
 
 void
 hibernate(){
 #ifdef DEBUG
-		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't hibernate this machine. Compile in normal mode to enable this functionality\n");
-		return;}
+	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't hibernate this machine. Compile in normal mode to enable this functionality\n");
+	return;}
 #endif
 #ifndef DEBUG
-		wall(wallSuspendWarning);
-		if(syncBeforeSuspend)
-			sync();
-		fprintf(stderr, "Suspending to memory\n");
-		FILE* f=fopen(powerState, "w");
-		if(f){
-			fprintf(f, "mem");
-			fclose(f);}
-		else{
-			perror(powerState);}}
+	wall(wallSuspendWarning);
+	if(syncBeforeSuspend)
+		sync();
+	fprintf(stderr, "Suspending to memory\n");
+	FILE* f=fopen(powerState, "w");
+	if(f){
+		fprintf(f, "mem");
+		fclose(f);}
+	else{
+		perror(powerState);}}
 #endif
 
 int
@@ -437,6 +439,7 @@ struct sockaddr_un daemon_adm_sock_addr;
 struct pollfd fds[MAX_FDS] = {0};
 int8_t fd_adm_sock[MAX_FDS] = {0};
 int8_t lstng_clients[MAX_FDS] = {0};
+int8_t lstng_clients_pos = 0;
 int poll_timeout = 1000 * loopInterval;
 int nfds = 0;
 int c_nfds = MAX_FDS;
@@ -659,6 +662,13 @@ lstn_cli_remove(int fd){
 			lstng_clients[i] = 0;
 			return(0);}}
 	return(1);}
+int
+lstn_cli_iter(){
+	if( lstng_clients_pos < DYN_FDS_MAX ) {
+		lstng_clients_pos++;
+		return( lstng_clients[ lstng_clients_pos ]);}
+	lstng_clients_pos++;
+	return(-1);}
 
 #endif
 
@@ -874,6 +884,15 @@ basic_send_msg(int conn_fd, const char* msg){
 		error_errno_msg_exit("couldn't write full message to socket","");}
 	write_size = write( conn_fd, "\n", 1 );
 }
+void
+send_msg_to_listening_lpmctl(const char* msg){
+	int fd=-1;
+	lstng_clients_pos=0;
+	while( (fd = lstn_cli_iter()) != -1 ){
+		if( fd ){
+			printf("sending message to lpmctl at %d fd\n", fd);
+			basic_send_msg( fd, msg);}}}
+
 
 void
 handle_clients(int i){
@@ -911,10 +930,6 @@ handle_clients(int i){
 			lstn_cli_append(fd);
 			}
 	memset(buf,0,BUF_SIZE);}
-
-void
-send_messages_to_listening_lpmctl(){
-	}
 
 #define ACPID_EV_MAX 5
 void

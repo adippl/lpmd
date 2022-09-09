@@ -4,6 +4,7 @@
 #include <string.h>
 #include "lpmd.h"
 #include "lpmd_messages.h"
+#include "error.h"
 #include <sys/socket.h>
 #include <sys/un.h>
 
@@ -17,9 +18,9 @@ int sock=0;
 int adm_sock=0;
 int conn_fd=0;
 
-char buf[512]={0};
+char buf[BUF_SIZE]={0};
 
-void
+int
 connect_to_daemon(){
 		struct sockaddr_un sock_addr;
 		const char* sock_path = NULL;
@@ -43,12 +44,20 @@ connect_to_daemon(){
 		sock_addr.sun_path,
 		sock_path,
 		sizeof(sock_addr.sun_path)-1);
+	retry:
 	if(connect(
 		conn_fd, 
 		(struct sockaddr *)&sock_addr, 
 		sizeof(struct sockaddr_un)) == -1){
-			error_errno_msg_exit("failed connect to ", sock_path);}
+		
+		if(mode_daemon){
+			return(1);
+			sleep(1);
+			goto retry;}
+		else{
+			error_errno_msg_exit("failed connect to ", sock_path);}}
 	fprintf(stderr, "connected to acpid at %s\n", sock_path);
+	return(0);
 }
 
 void
@@ -138,6 +147,7 @@ wait_for_reply(){
 
 int
 main(int argc, char** argv){
+	int rc=-2;
 	parse_args(argc, argv);
 	connect_to_daemon();
 	fds[0].fd = conn_fd;
@@ -145,9 +155,31 @@ main(int argc, char** argv){
 	
 	if( mode_daemon ){
 		basic_send_msg( client_listen_to_daemon );
-		fprintf(stderr, "daemon mode not implemented\n");
-		exit(EXIT_FAILURE);}
-	else{
+		//fprintf(stderr, "daemon mode not implemented\n");
+		//exit(EXIT_FAILURE);
+		while(1){
+			rc = poll(fds, 1, 1000000);
+			switch(rc){
+			case(0): // timeout
+				puts("DEBUG poll timeout");
+				continue;
+			case(-1): //error
+				puts("DEBUG poll error");
+				break;
+			default:
+				if( (fds[0].revents & POLLHUP) == POLLHUP ){
+					printf("lost connection to daemon\n");
+					close(fds[0].fd);
+					connect_to_daemon();
+					sleep(1);
+					}
+				if( (fds[0].revents & POLLERR) == POLLERR )
+					error_errno_msg_exit("poll error",NULL);
+				sock_print(fds[0].fd);
+				continue;
+			}
+		}
+	}else{
 		switch(action){
 		case CLIENT_SUSPEND_ASK:
 			basic_send_msg( client_suspend_ask );
