@@ -154,6 +154,7 @@ action_charger_disconnected(){
 
 void
 suspend(){
+	send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
 	send_msg_to_listening_lpmctl(suspend_sleep);
 #ifdef DEBUG
 	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
@@ -174,6 +175,8 @@ suspend(){
 
 void
 hibernate(){
+	send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
+	send_msg_to_listening_lpmctl(hibernate_sleep);
 #ifdef DEBUG
 	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't hibernate this machine. Compile in normal mode to enable this functionality\n");
 	return;}

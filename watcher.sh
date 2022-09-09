@@ -1,9 +1,9 @@
 #!/bin/sh
 while true; do 
-	inotifywait lpmd.c
-	rm a.out
+	inotifywait *.c *.h
+	sleep 0.1
 	clear
-	ctags lpmd.c
-	make buildDebug && ./lpmd 
+	ctags *.c
+	make debug 
 	echo exit code $?
 	done

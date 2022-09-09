@@ -20,6 +20,38 @@ int conn_fd=0;
 
 char buf[BUF_SIZE]={0};
 
+// TODO replace hardcoded paths with config option
+//const char* suspend_cmd = "i3lock -c 000000";
+const char* suspend_cmd_i3 = "i3lock -c 000000";
+const char* suspend_cmd_sway = "swaylock -c 000000";
+void
+lock_screen(){
+#ifndef DEBUG
+	int rc=-1;
+	if( access("/usr/bin/swaylock", F_OK | X_OK ) == 0 ) {
+		rc = system(suspend_cmd_sway);}
+	else if( access("/usr/bin/i3lock", F_OK | X_OK ) == 0 ) {
+		rc = system(suspend_cmd_i3);}
+	//rc = system(suspend_cmd);
+	printf("%d\n", rc );
+#endif
+#ifdef DEBUG
+	printf("DEBUG MODE, not locking up the screen\n");
+#endif
+	}
+
+void
+basic_send_msg(const char* msg){
+	size_t msg_size = strnlen(msg, MSG_MAX_LEN);
+	ssize_t write_size = write( conn_fd, msg, msg_size );
+	if( msg_size != (size_t)write_size){
+#ifdef DEBUG
+		fprintf(stderr, " %ld %ld\n", msg_size, write_size);
+#endif
+		error_errno_msg_exit("couldn't write full message to socket","");}
+	write_size = write( conn_fd, "\n", 1 );
+	}
+
 int
 connect_to_daemon(){
 		struct sockaddr_un sock_addr;
@@ -57,6 +89,10 @@ connect_to_daemon(){
 		else{
 			error_errno_msg_exit("failed connect to ", sock_path);}}
 	fprintf(stderr, "connected to acpid at %s\n", sock_path);
+	fds[0].fd = conn_fd;
+	fds[0].events = POLLIN;
+	if( mode_daemon )
+		basic_send_msg( client_listen_to_daemon );
 	return(0);
 }
 
@@ -83,21 +119,14 @@ parse_args(int argc, char** argv){
 		
 		if( !strncmp( &argv[1][1], "daemon", MSG_MAX_LEN) )
 			mode_daemon = 1;}
+//		if( !strncmp( &argv[1][1], "lock_cmd", MSG_MAX_LEN) ){
+//			argc--;
+//			argv++;
+//			printf("%p\n", &argv[1][0]);}
 		if( action==0 && mode_daemon == 0 ){
 			fprintf( stderr, "args are invalid\n");
 			exit(EXIT_FAILURE);}}
 
-void
-basic_send_msg(const char* msg){
-	size_t msg_size = strnlen(msg, MSG_MAX_LEN);
-	ssize_t write_size = write( conn_fd, msg, msg_size );
-	if( msg_size != (size_t)write_size){
-#ifdef DEBUG
-		fprintf(stderr, " %ld %ld\n", msg_size, write_size);
-#endif
-		error_errno_msg_exit("couldn't write full message to socket","");}
-	write_size = write( conn_fd, "\n", 1 );
-	}
 
 void
 sock_print(int fd){
@@ -113,6 +142,7 @@ handle_clients(int fd){
 		for( int i=0; i<MSG_MAX_LEN; i++ ){
 			if( buf[i] == '\n' )
 				buf[i] = '\0';}}
+//			printf("%s\n", buf);
 		if( !strncmp( buf, daemon_action_success, MSG_MAX_LEN)){
 			fprintf(stderr, "action success\n");
 			close(conn_fd);
@@ -126,6 +156,22 @@ handle_clients(int fd){
 			fprintf(stderr, "action failed");
 			exit(EXIT_FAILURE);
 				}
+		if( !strncmp( buf, daemon_ask_for_screen_locks, MSG_MAX_LEN)){
+			fprintf(stderr, "daemon asked to lock screen\n");
+			//TODO lock screen
+			lock_screen();
+			return;
+			}
+		if( !strncmp( buf, suspend_sleep, MSG_MAX_LEN)){
+			fprintf(stderr, "daemon is suspending system\n");
+			//TODO reaction to syspend
+			return;
+			}
+		if( !strncmp( buf, hibernate_sleep, MSG_MAX_LEN)){
+			fprintf(stderr, "daemon is hibernating system\n");
+			//TODO react to hibernate
+			return;
+			}
 	memset(buf,0,BUF_SIZE);}
 
 void
@@ -150,11 +196,8 @@ main(int argc, char** argv){
 	int rc=-2;
 	parse_args(argc, argv);
 	connect_to_daemon();
-	fds[0].fd = conn_fd;
-	fds[0].events = POLLIN;
 	
 	if( mode_daemon ){
-		basic_send_msg( client_listen_to_daemon );
 		//fprintf(stderr, "daemon mode not implemented\n");
 		//exit(EXIT_FAILURE);
 		while(1){
@@ -172,10 +215,12 @@ main(int argc, char** argv){
 					close(fds[0].fd);
 					connect_to_daemon();
 					sleep(1);
+					continue;
 					}
 				if( (fds[0].revents & POLLERR) == POLLERR )
 					error_errno_msg_exit("poll error",NULL);
-				sock_print(fds[0].fd);
+				handle_clients( fds[0].fd);
+				//sock_print(fds[0].fd);
 				continue;
 			}
 		}

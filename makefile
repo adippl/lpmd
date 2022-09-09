@@ -14,12 +14,10 @@ ifeq ($(CFLAGS),)
  CFLAGS := -Wall -Wextra -pedantic -O0 -g 
 endif
 
-lpmd: lpmd.c lpmctl.c error.c
-	$(CC) $(CFLAGS) -c error.c
+lpmd: lpmd.c lpmctl.c error.o
 	$(CC) $(CFLAGS) lpmd.c error.o -o lpmd
 	$(CC) $(CFLAGS) lpmctl.c error.o -o lpmctl
-debug: lpmd.c lpmctl.c error.c
-	$(CC) $(CFLAGS) -g -DDEBUG -c error.c
+debug: lpmd.c lpmctl.c error.o
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c error.o -o lpmd
 	$(CC) $(CFLAGS) -g -DDEBUG lpmctl.c error.o -o lpmctl
 clean:
