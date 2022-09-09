@@ -23,7 +23,7 @@ debug: lpmd.c lpmctl.c error.c
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c error.o -o lpmd
 	$(CC) $(CFLAGS) -g -DDEBUG lpmctl.c error.o -o lpmctl
 clean:
-	rm -f lpmd lpmd-profiler gmon.out
+	rm -f lpmd lpmctl *.socket lpmd-profiler gmon.out *.o
 install: lpmd
 	install -D -m 755 lpmd ${DESTDIR}${PREFIX}/bin/lpmd
 	install -D -m 755 lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
@@ -44,3 +44,12 @@ run-profiler: compile_profiler
 profiler: run-profiler
 	gprof lpmd_profiler gmon.out
 
+
+error.o: error.c
+	$(CC) $(CFLAGS) -c $<
+
+lpmctl: lpmctl.c
+	$(CC) $(CFLAGS) -o $@ -c $< 
+
+lpmd2: lpmd.c
+	$(CC) $(CFLAGS) -o $@ -c $^ 

@@ -27,6 +27,8 @@ const char* client_notify_daemon_about_idle="client_notify_daemon_about_idle";
 #define CLIENT_NOTIFY_DAEMON_ABOUT_IDLE 31
 const char* client_ask_for_lock_failed="client_ask_for_lock_failed";
 #define CLIENT_ASK_FOR_LOCK_FAILED 32
+const char* client_listen_to_daemon="client_listen_to_daemon";
+#define CLIENT_LISTEN_TO_DAEMON 33
 
 const char* client_suspend_ask="client_suspend_ask";
 #define CLIENT_SUSPEND_ASK 100

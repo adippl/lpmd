@@ -127,6 +127,7 @@ struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
 
 void setGovernor(int governor);
 void cpu_boost_control(int i);
+void wall(const char* message);
 
 void
 action_lid_open(){
@@ -150,6 +151,43 @@ action_charger_disconnected(){
 	lowBatWarning_warned=0;}
 
 
+void
+suspend(){
+#ifdef DEBUG
+		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
+		return;}
+#endif
+#ifndef DEBUG
+		wall(wallSuspendWarning);
+		if(syncBeforeSuspend)
+			sync();
+		fprintf(stderr, "Suspending to memory\n");
+		FILE* f=fopen(powerState, "w");
+		if(f){
+			fprintf(f, "mem");
+			fclose(f);}
+		else{
+			perror(powerState);}}
+#endif
+
+void
+hibernate(){
+#ifdef DEBUG
+		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't hibernate this machine. Compile in normal mode to enable this functionality\n");
+		return;}
+#endif
+#ifndef DEBUG
+		wall(wallSuspendWarning);
+		if(syncBeforeSuspend)
+			sync();
+		fprintf(stderr, "Suspending to memory\n");
+		FILE* f=fopen(powerState, "w");
+		if(f){
+			fprintf(f, "mem");
+			fclose(f);}
+		else{
+			perror(powerState);}}
+#endif
 
 int
 checkFile(const char* path){
@@ -249,14 +287,14 @@ checkSysDirs(){
 	if(i!=bat1Exists){
 		if(i){
 			bat1Exists=1;
-			fprintf(stderr, "BAT0 Detected\n");
+			fprintf(stderr, "BAT1 Detected\n");
 			bat1maxCharge=fileToint(bat1EnFull);
 			if(checkFile(bat1ThrStrt) && checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
 		else{
 			bat1Exists=0;
 			bat1HasThresholds=0;
-			fprintf(stderr, "BAT0 Missing\n");}}}
+			fprintf(stderr, "BAT1 Missing\n");}}}
 
 void
 checkSysDirs_fd_reuse_test(){ //test function
@@ -342,7 +380,7 @@ get_lid_stat_from_sys(){
 	char* token=NULL;
 	if(access(acpi_lid_path, R_OK)){
 		acpi_lid_path_exist=0;
-		fprintf(stderr, "Could not find acpi lid. Disabling lib related functionalities. (missing %s)\n", acpi_lid_path);
+		fprintf(stderr, "Could not find acpi lid. Disabling lid related functionalities. (missing %s)\n", acpi_lid_path);
 		return(1);}
 	if(f){
 		if( read(f, str, 31) <1 ){
@@ -398,11 +436,11 @@ struct sockaddr_un daemon_adm_sock_addr;
 
 struct pollfd fds[MAX_FDS] = {0};
 int8_t fd_adm_sock[MAX_FDS] = {0};
+int8_t lstng_clients[MAX_FDS] = {0};
 int poll_timeout = 1000 * loopInterval;
 int nfds = 0;
 int c_nfds = MAX_FDS;
 int current_nfds = 0;
-int current_size = 0;
 
 
 void
@@ -457,10 +495,13 @@ daemon_sock_create(){
 	if(chmod(daemon_sock_path, 0660)==-1)
 		error_errno_msg_exit("chmod failed on socket",NULL);
 	
+/* don't set group to run rootless in test */
+#ifndef DEBUG
 	chown_custom(
 		daemon_sock_path,
 		daemon_socket_user,
 		daemon_socket_group);
+#endif
 	
 	if( listen(daemon_sock, LISTEN_BACKLOG) == -1 )
 		error_errno_msg_exit("listen command failed",NULL);
@@ -520,10 +561,13 @@ daemon_adm_sock_create(){
 	if(chmod(daemon_adm_sock_path, 0660)==-1)
 		error_errno_msg_exit("chmod failed on socket",NULL);
 	
+/* don't set group to run rootless in test */
+#ifndef DEBUG
 	chown_custom(
 		daemon_adm_sock_path,
 		daemon_adm_socket_user,
 		daemon_adm_socket_group);
+#endif
 	
 	if( listen(daemon_adm_sock, LISTEN_BACKLOG) == -1 )
 		error_errno_msg_exit("listen command failed",NULL);
@@ -570,6 +614,51 @@ fds_remove(int fd){
 			return(0);}}
 	return(1);}
 
+int
+adm_conn_append(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( fd_adm_sock[i] == 0 ){
+			fd_adm_sock[i] = fd;
+			return(0);}}
+	return(1);}
+
+int
+adm_conn_check(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( fd_adm_sock[i] == fd )
+			return(1);}
+	return(0);}
+
+int
+adm_conn_remove(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( fd_adm_sock[i] == fd ){
+			fd_adm_sock[i] = 0;
+			return(0);}}
+	return(1);}
+
+int
+lstn_cli_append(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( lstng_clients[i] == 0 ){
+			lstng_clients[i] = fd;
+			return(0);}}
+	return(1);}
+
+int
+lstn_cli_check(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( lstng_clients[i] == fd )
+			return(1);}
+	return(0);}
+
+int
+lstn_cli_remove(int fd){
+	for(int i=DYN_FDS_MIN; i<DYN_FDS_MAX; i++){
+		if( lstng_clients[i] == fd ){
+			lstng_clients[i] = 0;
+			return(0);}}
+	return(1);}
 
 #endif
 
@@ -734,23 +823,11 @@ updateChargerState(){
 		chargerChangedState();}}
 
 void
-battery_low_suspend(){ //TODO crete generic version withouw WALL
-#ifdef DEBUG
-		fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
-		return;}
-#endif
-#ifndef DEBUG
+battery_low_suspend(){
 		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDelay);
+		sleep( suspendDelay);
 		wall(wallSuspendWarning);
-		if(syncBeforeSuspend)
-			sync();
-		FILE* f=fopen(powerState, "w");
-		if(f){
-			fprintf(f, "mem");
-			fclose(f);}
-		else{
-			perror(powerState);}}
-#endif
+		suspend();}
 
 
 int
@@ -803,33 +880,41 @@ handle_clients(int i){
 	int numRead=-1;
 	int fd = fds[i].fd;
 	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
-		fprintf( stderr, "adminsock %d\n", fd_adm_sock[fd]);
 		for( int i=0; i<MSG_MAX_LEN; i++ ){
 			if( buf[i] == '\n' )
 				buf[i] = '\0';}}
 		if( !strncmp( buf, client_suspend_ask, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT ASKED FOR SUSPEND\n");
-			if( !fd_adm_sock[fd]){
+			if( !adm_conn_check(fd) ){
 				basic_send_msg(fds[i].fd, daemon_action_refuse);}
 			else{
-				//TODO suspend
 				basic_send_msg(fds[i].fd, daemon_action_success);}
+				suspend();
 				}
 		if( !strncmp( buf, client_hibernate_ask, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT ASKED FOR HINERNATION\n");
-			if( !fd_adm_sock[fd]){
+			if( !adm_conn_check(fd) ){
 				basic_send_msg(fds[i].fd, daemon_action_refuse);
 				}
 			else{
-				//TODO hibernate
 				basic_send_msg(fds[i].fd, daemon_action_success);}
+				hibernate();
 				}
 		if( !strncmp( buf, client_notify_daemon_about_idle, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT NOTIFIED ABOUT IDLE DESKTOP\n");
 			basic_send_msg(fds[i].fd, daemon_action_success);
 			//TODO do something
 			}
+		if( !strncmp( buf, client_listen_to_daemon, MSG_MAX_LEN)){
+			fprintf(stderr, "LISTENING CLIENT CONNECTED\n");
+			//basic_send_msg(fds[i].fd, daemon_action_success);
+			lstn_cli_append(fd);
+			}
 	memset(buf,0,BUF_SIZE);}
+
+void
+send_messages_to_listening_lpmctl(){
+	}
 
 #define ACPID_EV_MAX 5
 void
@@ -907,19 +992,17 @@ accept_connection(int fd, int adm){
 	if( fds_append( new_fd, POLLIN )){
 		fprintf(stderr, "ERR failed to accept() connetion FDS full\n");
 		return;}
-	if( adm ){
-		fd_adm_sock[ new_fd ] = 1;
-		printf("efsjeofjseofijspoeifjp %d %d\n", new_fd, fd_adm_sock[new_fd] );;
-		}
-		}
+	if( adm )
+		adm_conn_append( new_fd );}
 
 void
 cleanup_connection(int fd_pos){
 	close(fds[fd_pos].fd);
+	adm_conn_remove( fds[fd_pos].fd );
+	lstn_cli_remove( fds[fd_pos].fd );
 	fds[fd_pos].fd=-1;
 	fds[fd_pos].events=0;
 	fds[fd_pos].revents=0;
-	fd_adm_sock[fd_pos]=0;
 	nfds--;}
 
 void

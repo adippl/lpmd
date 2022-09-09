@@ -54,7 +54,6 @@ connect_to_daemon(){
 void
 parse_args(int argc, char** argv){
 	for(;argc>1&&argv[1][0]=='-';argc--,argv++){
-		printf("%d %s\n", argc, argv[1]);
 		if( !strncmp( &argv[1][1], "h", MSG_MAX_LEN) )
 			printf("TODO help message\n");
 		
@@ -85,7 +84,7 @@ basic_send_msg(const char* msg){
 	ssize_t write_size = write( conn_fd, msg, msg_size );
 	if( msg_size != (size_t)write_size){
 #ifdef DEBUG
-		printf(" %ld %ld\n", msg_size, write_size);
+		fprintf(stderr, " %ld %ld\n", msg_size, write_size);
 #endif
 		error_errno_msg_exit("couldn't write full message to socket","");}
 	write_size = write( conn_fd, "\n", 1 );
@@ -125,16 +124,16 @@ wait_for_reply(){
 	int rc = poll(fds, 1, 1000);
 	switch(rc){
 	case(0): // timeout
-		printf("Timed out while waiting for reply");
+		fprintf(stderr, "Timed out while waiting for reply");
 		exit(EXIT_FAILURE);
 	case(-1): //error
-		printf("Poll failure for reply\n");
+		fprintf(stderr, "Poll failure for reply\n");
 		exit(EXIT_FAILURE);
 	default:
 		if( (fds[0].revents & POLLIN) == POLLIN )
 			handle_clients( fds[0].fd );}
 		if( (fds[0].revents & POLLIN) != POLLIN )
-			printf("connection error\n");
+			error_errno_msg_exit("connection failure", "");
 			}
 
 int
@@ -144,9 +143,9 @@ main(int argc, char** argv){
 	fds[0].fd = conn_fd;
 	fds[0].events = POLLIN;
 	
-	printf("%d\n", mode_daemon);
 	if( mode_daemon ){
-		printf("daemon mode not implemented\n");
+		basic_send_msg( client_listen_to_daemon );
+		fprintf(stderr, "daemon mode not implemented\n");
 		exit(EXIT_FAILURE);}
 	else{
 		switch(action){
@@ -160,7 +159,6 @@ main(int argc, char** argv){
 			basic_send_msg( client_notify_daemon_about_idle );
 			break;
 		}
-		//sock_print(conn_fd);
 		wait_for_reply();
 		}
 	}
