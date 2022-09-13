@@ -125,6 +125,37 @@ struct sockaddr_un acpid_sock_addr;
 struct timeval select_timeout = { .tv_sec=loopInterval, .tv_usec=0 };
 
 
+
+/* network */
+#include <sys/stat.h>
+#include <pwd.h>
+#include <grp.h>
+#include <sys/ioctl.h>
+#define LISTEN_BACKLOG 32
+#define MAX_FDS 40
+#define D_SOCK 0
+#define D_ADM_SOCK 1
+#define D_ACPID_SOCK 2
+const char* daemon_socket_user= 	"root";
+const char* daemon_socket_group=	"users";
+const int   daemon_socket_perm=		0660;
+//const char* daemon_sock_path="./lpmd.socket";
+struct sockaddr_un daemon_sock_addr;
+
+const char* daemon_adm_socket_user= 	"root";
+const char* daemon_adm_socket_group=	"wheel";
+const int   daemon_adm_socket_perm=		0660;
+//const char* daemon_adm_sock_path="./lpmd_adm.socket";
+struct sockaddr_un daemon_adm_sock_addr;
+
+struct pollfd fds[MAX_FDS] = {0};
+int8_t fd_adm_sock[MAX_FDS] = {0};
+int8_t lstng_clients[MAX_FDS] = {0};
+int8_t lstng_clients_pos = 0;
+int poll_timeout = 1000 * loopInterval;
+int nfds = 0;
+int c_nfds = MAX_FDS;
+
 void setGovernor(int governor);
 void cpu_boost_control(int i);
 void wall(const char* message);
@@ -161,7 +192,7 @@ suspend(){
 	return;}
 #endif
 #ifndef DEBUG
-	wall(wallSuspendWarning);
+	//wall(wallSuspendWarning);
 	if(syncBeforeSuspend)
 		sync();
 	fprintf(stderr, "Suspending to memory\n");
@@ -416,39 +447,6 @@ get_lid_stat_from_sys(){
 		perror(powerState);}
 		return(1);}
 
-
-#ifndef NO_SOCKET
-#include <sys/stat.h>
-#include <pwd.h>
-#include <grp.h>
-#include <sys/ioctl.h>
-#define LISTEN_BACKLOG 32
-#define MAX_FDS 40
-#define D_SOCK 0
-#define D_ADM_SOCK 1
-#define D_ACPID_SOCK 2
-const char* daemon_socket_user= 	"root";
-const char* daemon_socket_group=	"users";
-const int   daemon_socket_perm=		0660;
-//const char* daemon_sock_path="./lpmd.socket";
-struct sockaddr_un daemon_sock_addr;
-
-const char* daemon_adm_socket_user= 	"root";
-const char* daemon_adm_socket_group=	"wheel";
-const int   daemon_adm_socket_perm=		0660;
-//const char* daemon_adm_sock_path="./lpmd_adm.socket";
-struct sockaddr_un daemon_adm_sock_addr;
-
-struct pollfd fds[MAX_FDS] = {0};
-int8_t fd_adm_sock[MAX_FDS] = {0};
-int8_t lstng_clients[MAX_FDS] = {0};
-int8_t lstng_clients_pos = 0;
-int poll_timeout = 1000 * loopInterval;
-int nfds = 0;
-int c_nfds = MAX_FDS;
-int current_nfds = 0;
-
-
 void
 chown_custom(const char* path, const char* user, const char* group){
 	gid_t uid = 0;
@@ -508,6 +506,10 @@ daemon_sock_create(){
 		daemon_socket_user,
 		daemon_socket_group);
 #endif
+	chown_custom(
+		daemon_sock_path,
+		daemon_socket_user,
+		daemon_socket_group);
 	
 	if( listen(daemon_sock, LISTEN_BACKLOG) == -1 )
 		error_errno_msg_exit("listen command failed",NULL);
@@ -673,15 +675,10 @@ lstn_cli_iter(){
 	lstng_clients_pos++;
 	return(-1);}
 
-#endif
-
-
 void
 lpmd_clanup(){
-#ifndef NO_SOCKET
 	daemon_sock_close();
 	daemon_adm_sock_close();
-#endif
 	}
 
 /* signal section */
@@ -1059,7 +1056,7 @@ poll_fds(){
 		for(int i=0; i < current_nfds ;i++){
 			if( fds[i].revents == 0 )
 				continue;
-			if( fds[i].revents == POLLHUP || fds[i].revents == POLLERR ){
+			if( (fds[i].revents & POLLHUP)==POLLHUP || (fds[i].revents & POLLERR)==POLLERR ){
 #ifdef DEBUG
 				printf("lost connection on %d fd, arrpos %d, rev %d\n",
 					fds[i].fd, i, fds[i].revents);
@@ -1067,7 +1064,7 @@ poll_fds(){
 				cleanup_connection(i);
 				continue;}
 			if( fds[i].revents != POLLIN ){
-				printf("ERROR %d %d fd %d\n", i, fds[i].revents ,fds[i].fd);
+				printf("ERROR %d %08x fd %d\n", i, fds[i].revents ,fds[i].fd);
 				if((fds[i].revents & POLLERR) == POLLERR){
 					printf("POLLERR\n");}
 				}
@@ -1144,13 +1141,10 @@ main(){
 	setThresholds();
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
-#ifndef NO_SOCKET
-	//memset(fds, 0 , sizeof(fds));
 	zero_fds();
 	daemon_sock_create();
 	daemon_adm_sock_create();
 	setup_sigaction();
-#endif
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
 			puts("DEBUG main loop start\n");
@@ -1170,8 +1164,10 @@ main(){
 #ifdef DEBUG_PRINT
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
 #endif
+#ifdef DEBUG
 			print_time_no_newline();
 			printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
+#endif
 			if(!acpid_connected)
 				sleep(loopInterval);
 			}
