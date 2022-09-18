@@ -21,9 +21,9 @@ build: lpmd lpmctl
 error.o: error.c
 	$(CC) $(CFLAGS) -c $< -o $@
 lpmctl: lpmctl.c error.o
-	$(CC) $(CFLAGS) -o $@ -c $< 
+	$(CC) $(CFLAGS) -o $@ $^ 
 lpmd: lpmd.c error.o
-	$(CC) $(CFLAGS) -o $@ -c $< 
+	$(CC) $(CFLAGS) -o $@ $^ 
 
 debug: lpmd.c lpmctl.c error.o
 	$(CC) $(CFLAGS) -g -DDEBUG error.c -o error.o
