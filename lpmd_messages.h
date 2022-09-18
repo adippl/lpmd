@@ -40,6 +40,10 @@ const char* daemon_suspend_refuse="daemon_suspend_refuse";
 #define DAEMON_SUSPEND_REFUSE 102
 const char* daemon_hibernate_refuse="daemon_hibernate_refuse";
 #define DAEMON_HIBERNATE_REFUSE 103
+const char* client_lock_ask="client_lock_ask";
+#define CLIENT_LOCK_ASK 104
+const char* client_lock_all_ask="client_lock_all_ask";
+#define CLIENT_LOCK_ALL_ASK 105
 
 
 const char* daemon_ask_for_screen_locks="daemon_ask_for_screen_locks";

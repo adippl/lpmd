@@ -30,6 +30,7 @@
 #include <poll.h>
 
 #include "lpmd.h"
+#include "error.h"
 #include "lpmd_messages.h"
 
 #define SSTR 64

@@ -62,7 +62,7 @@ lock_screen(){
 		lock_progname=lock_cmd;
 		/* jump to first argument */
 		for( int i=0; i<MSG_MAX_LEN-1; i++ ){
-			if( lock_cmd_ptr[i] == '\0' && lock_cmd_ptr[i+1] != '\0' && ! isspace(lock_cmd_ptr[i+1]) ){
+			if( lock_cmd_ptr[i] == '\0' && lock_cmd_ptr[i+1] != '\0' ){
 				str_pos = i+1;
 				break;}}
 		/* create array of args for execv() */
@@ -73,7 +73,7 @@ lock_screen(){
 		/* check if arguments are repeating */
 		/* find next argument */
 		for( unsigned int i=str_pos; i<org_strlen; i++ ){
-			if( lock_cmd_ptr[i-1] == '\0' && lock_cmd_ptr[i] != '\0' && ! isspace(lock_cmd_ptr[i]) ){
+			if( lock_cmd_ptr[i-1] == '\0' && lock_cmd_ptr[i] != '\0' ){
 				str_pos = i;
 				lock_argv[lock_argc++] = &lock_cmd_ptr[ str_pos ];
 			}
@@ -156,6 +156,7 @@ connect_to_daemon(){
 		switch(action){
 			case CLIENT_SUSPEND_ASK:
 			case CLIENT_HIBERNATE_ASK:
+			case CLIENT_LOCK_ALL_ASK:
 				sock_path = daemon_adm_sock_path;
 				break;
 			default:
@@ -205,6 +206,8 @@ parse_args(int argc, char** argv){
 			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
 		if( !strncmp( &argv[1][1], "client_idle", MSG_MAX_LEN) )
 			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
+		if( !strncmp( &argv[1][1], "lock_all", MSG_MAX_LEN) )
+			action = CLIENT_LOCK_ALL_ASK;
 		
 		if( !strncmp( &argv[1][1], "daemon", MSG_MAX_LEN) )
 			mode_daemon = 1;
@@ -225,10 +228,7 @@ parse_args(int argc, char** argv){
 			else{
 				fprintf(stderr, "-lock_cmd used without argument\n");
 				exit(EXIT_FAILURE);}
-			//argc--;
-			//argv++;
-			//printf("%p\n", &argv[1][0]);
-			}
+		}
 	}
 		
 	if( action==0 && mode_daemon == 0 ){
@@ -354,6 +354,9 @@ main(int argc, char** argv){
 			break;
 		case CLIENT_NOTIFY_DAEMON_ABOUT_IDLE:
 			basic_send_msg( client_notify_daemon_about_idle );
+			break;
+		case CLIENT_LOCK_ALL_ASK:
+			basic_send_msg( client_lock_all_ask );
 			break;
 		}
 		wait_for_reply();
