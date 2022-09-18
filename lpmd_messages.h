@@ -44,6 +44,10 @@ const char* client_lock_ask="client_lock_ask";
 #define CLIENT_LOCK_ASK 104
 const char* client_lock_all_ask="client_lock_all_ask";
 #define CLIENT_LOCK_ALL_ASK 105
+const char* client_lock_success="client_lock_success";
+#define CLIENT_LOCK_SUCCESS 106
+const char* client_lock_fail="client_lock_fail";
+#define CLIENT_LOCK_FAIL 106
 
 
 const char* daemon_ask_for_screen_locks="daemon_ask_for_screen_locks";

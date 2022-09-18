@@ -117,6 +117,11 @@ int lid_state=0;
 int lid_state_changed=1;
 
 
+const int require_session_locks=0;
+int waiting_for_session_lock_before_suspend=0;
+int waiting_for_session_lock_before_hibernate=0;
+
+
 /* connection to acpid*/
 const char acpid_sock_path[]="/run/acpid.socket";
 char buf[BUF_SIZE];
@@ -186,7 +191,10 @@ action_charger_disconnected(){
 
 void
 suspend(){
-	send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
+	if( ! require_session_locks )
+		send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
+	else
+		usleep(1000*100); /* sleep 100ms */
 	send_msg_to_listening_lpmctl(suspend_sleep);
 #ifdef DEBUG
 	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
@@ -895,6 +903,17 @@ send_msg_to_listening_lpmctl(const char* msg){
 			basic_send_msg( fd, msg);}}}
 
 
+/* TODO this whole functionality requires separate thread */
+void
+react_to_session_lock_result(){
+	if( waiting_for_session_lock_before_suspend ){
+		waiting_for_session_lock_before_suspend=0;
+		suspend();}
+	if( waiting_for_session_lock_before_hibernate ){
+		waiting_for_session_lock_before_hibernate=0;
+		hibernate();}
+}
+
 void
 handle_clients(int i){
 	int numRead=-1;
@@ -909,7 +928,12 @@ handle_clients(int i){
 				basic_send_msg(fds[i].fd, daemon_action_refuse);}
 			else{
 				basic_send_msg(fds[i].fd, daemon_action_success);}
-				suspend();
+				if(require_session_locks){
+					send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
+					waiting_for_session_lock_before_suspend=1;
+					waiting_for_session_lock_before_hibernate=0;}
+				else
+					suspend();
 				}
 		if( !strncmp( buf, client_hibernate_ask, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT ASKED FOR HINERNATION\n");
@@ -918,10 +942,32 @@ handle_clients(int i){
 				}
 			else{
 				basic_send_msg(fds[i].fd, daemon_action_success);}
-				hibernate();
+				if( require_session_locks ){
+					send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
+					waiting_for_session_lock_before_suspend=0;
+					waiting_for_session_lock_before_hibernate=1;}
+				else
+					hibernate();
 				}
 		if( !strncmp( buf, client_notify_daemon_about_idle, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT NOTIFIED ABOUT IDLE DESKTOP\n");
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			//TODO do something
+			}
+		if( !strncmp( buf, client_lock_success, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT SUCCESSFULY LOCKED IT'S SESSION\n");
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			//TODO do something
+			react_to_session_lock_result();
+			}
+		if( !strncmp( buf, client_lock_fail, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT FAILED TO LOCKED IT'S SESSION\n");
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			//TODO do something
+			react_to_session_lock_result();
+			}
+		if( !strncmp( buf, client_lock_ask, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO LOCK ALL SESSIONS\n");
 			basic_send_msg(fds[i].fd, daemon_action_success);
 			//TODO do something
 			}

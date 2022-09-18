@@ -25,10 +25,10 @@ lpmctl: lpmctl.c error.o
 lpmd: lpmd.c error.o
 	$(CC) $(CFLAGS) -o $@ $^ 
 
-debug: lpmd.c lpmctl.c error.o
-	$(CC) $(CFLAGS) -g -DDEBUG error.c -o error.o
-	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c error.o -o lpmd
-	$(CC) $(CFLAGS) -g -DDEBUG lpmctl.c error.o -o lpmctl
+debug: lpmd.c lpmctl.c error.c
+	$(CC) $(CFLAGS) -DDEBUG -c error.c
+	$(CC) $(CFLAGS) -DDEBUG lpmd.c error.o -o lpmd
+	$(CC) $(CFLAGS) -DDEBUG lpmctl.c error.o -o lpmctl
 
 clean:
 	rm -f lpmd lpmctl *.socket lpmd-profiler gmon.out *.o

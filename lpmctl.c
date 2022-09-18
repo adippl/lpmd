@@ -30,21 +30,28 @@ char lock_cmd[MSG_MAX_LEN]={0};
 char* lock_cmd_ptr = NULL;
 int lock_cmd_converted=0;
 char* lock_cmd_=0;
-//char* lock_argv[10] = {0};
-char* lock_argv[10] = {0};
+#define lock_argv_len 10
+/* arr len +1 to make sure array is null terminated */
+char* lock_argv[lock_argv_len+1] = {0};
 int lock_argc=0;
 int screen_locked=0;
-char* lock_progname=NULL;
 pid_t lock_pid=0;
+
+int map_str_to_str_arr(
+	char* str,
+	int str_max_len,
+	char** char_arr_ptr,
+	int char_arr_max_size,
+	int* ret_char_arr_size);
+void basic_send_msg(const char* msg);
+
 
 void
 lock_screen(){
-#ifndef DEBUG
+	printf("locking screen\n");
 	/* this supports max 10 arguments to locking commands */
-	/* progname from lock_cmd. will set \n in whitespace later */
-	int str_pos = 0;
-	size_t org_strlen = strnlen( lock_cmd, MSG_MAX_LEN);
-	int pos=0;
+	int rc=-9;
+	int arrsize=0;
 	
 	/* check if we already have child process locking screen */
 	int waitpid_status = waitpid( lock_pid, NULL, WNOHANG);
@@ -54,56 +61,46 @@ lock_screen(){
 		return;}
 	
 	if( !lock_cmd_converted ){
-		/* replace whitespace with '\0's */
-		while( lock_cmd_ptr[pos] != '\0' ){
-			if( isspace( lock_cmd_ptr[pos] ))
-				lock_cmd_ptr[pos]='\0';
-			pos++;}
-		lock_progname=lock_cmd;
-		/* jump to first argument */
-		for( int i=0; i<MSG_MAX_LEN-1; i++ ){
-			if( lock_cmd_ptr[i] == '\0' && lock_cmd_ptr[i+1] != '\0' ){
-				str_pos = i+1;
-				break;}}
-		/* create array of args for execv() */
-		lock_argv[lock_argc++] = lock_cmd_ptr;
-		/* set argument */
-		lock_argv[lock_argc++] = &lock_cmd_ptr[ str_pos ];
-		str_pos++;
-		/* check if arguments are repeating */
-		/* find next argument */
-		for( unsigned int i=str_pos; i<org_strlen; i++ ){
-			if( lock_cmd_ptr[i-1] == '\0' && lock_cmd_ptr[i] != '\0' ){
-				str_pos = i;
-				lock_argv[lock_argc++] = &lock_cmd_ptr[ str_pos ];
-			}
-		}
-		lock_cmd_converted=1;
+		rc = map_str_to_str_arr( 
+			lock_cmd_ptr,
+			MSG_MAX_LEN, 
+			lock_argv,
+			lock_argv_len,
+			&arrsize);
+		if(!rc)
+			lock_cmd_converted=1,
+			printf("success\n");
 	}
 	
-	printf("progname %s\ndumping lock command arguments\n", lock_progname);
+#ifdef DEBUG
+	printf("progname %s\ndumping lock command arguments\n", lock_argv[0]);
 	for(int i=0;i<10;i++)
 		printf("arg %d %s\n", i, lock_argv[i]);
-	
-	/* don't do anything if screen is locked */
-	if(screen_locked)
-		return;
-	//rc = system(lock_cmd);
-	//printf("%d\n", rc );
-	lock_pid = fork();
-	//printf("%d\n", lock_pid);
-	if( lock_pid<0 )
-		// error out here!
-		fprintf(stderr,"fork error\n");
-	if( !lock_pid ){
-		for(int i=0;i<10;i++)
-			printf("arg %d %s\n", i, lock_argv[i]);}
-		
-	if( !lock_pid && execvp( lock_progname, lock_argv ))
-	    // error in the child proc here!
-		printf("wtf\n");
-	// ...parent execution continues here...
+#endif
 
+#ifndef DEBUG
+	lock_pid = fork();
+	if( lock_pid<0 )
+		fprintf(stderr,"fork error\n");
+//	if( !lock_pid ){
+//		for(int i=0;i<10;i++)
+//			printf("arg %d %s\n", i, lock_argv[i]);}
+		
+	if( !lock_pid && execvp( lock_argv[0], lock_argv ))
+	    // child process
+		printf("wtf\n");
+	// parent process
+	
+	/* check if locking program is running */
+	waitpid_status = 0;
+	waitpid_status = waitpid( lock_pid, NULL, WNOHANG);
+	printf("lock stats %d\n", waitpid_status);
+	if( ! waitpid_status ){
+		fprintf(stdout, "child process running\n");
+		basic_send_msg(client_lock_success);}
+	else{
+		basic_send_msg(client_lock_fail);}
+		
 #endif
 #ifdef DEBUG
 	printf("DEBUG MODE, not locking up the screen\n");
@@ -145,6 +142,56 @@ setup_lock_command(){
 		lock_cmd_ptr = (char*)&lock_cmd;
 		printf("found /usr/bin/i3lock, setting it as lock_cmd\n");
 		return;}}
+
+
+int
+map_str_to_str_arr(
+	char* str,
+	int str_max_len,
+	char** char_arr_ptr,
+	int char_arr_max_size,
+	int* ret_char_arr_size){
+	
+	size_t org_strlen=0; 
+	int pos=0;
+	int str_pos=0;
+	//char* loc_argv[] = char_arr_ptr;
+	
+	/* check input */
+	if( !str || !char_arr_ptr || !ret_char_arr_size )
+		return(-1);
+	if( str_max_len < 1 )
+		return(-2);
+	if( char_arr_max_size < 2 )
+		return(-3);
+	
+	org_strlen = strnlen( str, str_max_len);
+	*ret_char_arr_size = 0;
+	
+	while( str[pos] != '\0' ){
+		if( isspace( str[pos] ))
+			str[pos]='\0';
+		pos++;}
+	//lock_progname=lock_cmd;
+	/* jump to first argument */
+	for( int i=0; i<MSG_MAX_LEN-1; i++ ){
+		if( str[i] == '\0' && str[i+1] != '\0' ){
+			str_pos = i+1;
+			break;}}
+	/* create array of args for execv() */
+	char_arr_ptr[(*ret_char_arr_size)++] = str;
+	/* set argument */
+	char_arr_ptr[(*ret_char_arr_size)++] = &str[ str_pos ];
+	str_pos++;
+	/* check if arguments are repeating */
+	/* find next argument */
+	for( unsigned int i=str_pos; i<org_strlen; i++ ){
+		if( str[i-1] == '\0' && str[i] != '\0' ){
+			str_pos = i;
+			char_arr_ptr[(*ret_char_arr_size)++] = &str[ str_pos ];
+		}
+	}
+	return(0);}
 
 int
 connect_to_daemon(){
@@ -307,10 +354,21 @@ wait_for_reply(){
 int
 main(int argc, char** argv){
 	int rc=-2;
+	
+//	int arrsize=0;
+//	setup_lock_command();
+//	rc = map_str_to_str_arr( 
+//		lock_cmd_ptr,
+//		MSG_MAX_LEN, 
+//		(char**)&lock_argv,
+//		10,
+//		&arrsize);
+//	if(!rc)
+//		lock_cmd_converted=1, printf("success\n");
+	
 	parse_args(argc, argv);
 	setup_lock_command();
 	connect_to_daemon();
-	
 	if( mode_daemon ){
 		//fprintf(stderr, "daemon mode not implemented\n");
 		//exit(EXIT_FAILURE);
