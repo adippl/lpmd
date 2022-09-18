@@ -11,22 +11,36 @@ ifeq ($(CC),)
  CC := cc 
 endif
 ifeq ($(CFLAGS),)
- CFLAGS := -Wall -Wextra -pedantic -O0 -g 
+ CFLAGS := -Wall -Wextra -pedantic -O0 -g
 endif
 
-lpmd: lpmd.c lpmctl.c error.o
-	$(CC) $(CFLAGS) lpmd.c error.o -o lpmd
-	$(CC) $(CFLAGS) lpmctl.c error.o -o lpmctl
+.PHONY: build
+build: lpmd lpmctl
+
+
+error.o: error.c
+	$(CC) $(CFLAGS) -c $< -o $@
+lpmctl: lpmctl.c error.o
+	$(CC) $(CFLAGS) -o $@ -c $< 
+lpmd: lpmd.c error.o
+	$(CC) $(CFLAGS) -o $@ -c $< 
+
 debug: lpmd.c lpmctl.c error.o
+	$(CC) $(CFLAGS) -g -DDEBUG error.c -o error.o
 	$(CC) $(CFLAGS) -g -DDEBUG lpmd.c error.o -o lpmd
 	$(CC) $(CFLAGS) -g -DDEBUG lpmctl.c error.o -o lpmctl
+
 clean:
 	rm -f lpmd lpmctl *.socket lpmd-profiler gmon.out *.o
+
 install: lpmd
 	install -D -m 755 lpmd ${DESTDIR}${PREFIX}/bin/lpmd
+	install -D -m 755 lpmctl ${DESTDIR}${PREFIX}/bin/lpmctl
 	install -D -m 755 lpmd-openrc ${DESTDIR}/etc/init.d/lpmd 
 uninstall:
-	rm -f $(DESTDIR)${PREFIX}/bin/lpmd $(DESTDIR)/etc/init.d/lmpd
+	rm -f $(DESTDIR)${PREFIX}/bin/lpmd
+	rm -f $(DESTDIR)/etc/init.d/lmpd 
+	rm -f ${DESTDIR}${PREFIX}/bin/lpmctl
 
 su-install: lpmd
 	su root -c 'make install'
@@ -42,12 +56,3 @@ run-profiler: compile_profiler
 profiler: run-profiler
 	gprof lpmd_profiler gmon.out
 
-
-error.o: error.c
-	$(CC) $(CFLAGS) -c $<
-
-lpmctl: lpmctl.c
-	$(CC) $(CFLAGS) -o $@ -c $< 
-
-lpmd2: lpmd.c
-	$(CC) $(CFLAGS) -o $@ -c $^ 
