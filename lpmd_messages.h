@@ -50,6 +50,22 @@ const char* client_lock_fail="client_lock_fail";
 #define CLIENT_LOCK_FAIL 106
 
 
+//const struct msg { const int id; const char* str; };
+//
+//struct msg client_ask_zero_bat_thresholds = {
+//	.id = 107,
+//	.str = "client_ask_zero_bat_thresholds" };
+//struct msg client_ask_restore_def_bat_thresholds = {
+//	.id = 108,
+//	.str = "client_ask_restore_def_bat_thresholds" };
+
+const char* client_ask_zero_bat_thresholds="client_ask_zero_bat_thresholds";
+#define CLIENT_ASK_ZERO_BAT_THRESHOLDS 107
+const char* client_ask_restore_def_bat_thresholds="client_ask_restore_def_bat_thresholds";
+#define CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS 108
+const char* cl_new="cl_new";
+#define cl_new 199
+
 const char* daemon_ask_for_screen_locks="daemon_ask_for_screen_locks";
 #define DAEMON_ASK_FOR_SCREEN_LOCKS 201
 const char* daemon_exit_goodbye="daemon_exit_goodbye";

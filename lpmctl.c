@@ -1,14 +1,14 @@
-#include <stdio.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <string.h>
+#include "error.h"
 #include "lpmd.h"
 #include "lpmd_messages.h"
-#include "error.h"
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <ctype.h>
 #include <sys/wait.h>
+#include <unistd.h>
 
 #include <poll.h>
 struct pollfd fds[1] = {0};
@@ -246,15 +246,20 @@ parse_args(int argc, char** argv){
 		
 		if( !strncmp( &argv[1][1], client_hibernate_ask, MSG_MAX_LEN) )
 			action = CLIENT_HIBERNATE_ASK;
-		if( !strncmp( &argv[1][1], "hibernate", MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], "hibernate", MSG_MAX_LEN) ) /* -hibernate */
 			action = CLIENT_HIBERNATE_ASK;
 		
 		if( !strncmp( &argv[1][1], client_notify_daemon_about_idle, MSG_MAX_LEN) )
 			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
-		if( !strncmp( &argv[1][1], "client_idle", MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], "client_idle", MSG_MAX_LEN) ) /* -client_idle */
 			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
-		if( !strncmp( &argv[1][1], "lock_all", MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], "lock_all", MSG_MAX_LEN) ) /* -lock_all */
 			action = CLIENT_LOCK_ALL_ASK;
+
+		if( !strncmp( &argv[1][1], "fullCharge", MSG_MAX_LEN) ) /* -fullCharge */
+			action = CLIENT_ASK_ZERO_BAT_THRESHOLDS;
+		if( !strncmp( &argv[1][1], "safeCharge", MSG_MAX_LEN) ) /* -safeCharge */
+			action = CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS;
 		
 		if( !strncmp( &argv[1][1], "daemon", MSG_MAX_LEN) )
 			mode_daemon = 1;
@@ -415,6 +420,12 @@ main(int argc, char** argv){
 			break;
 		case CLIENT_LOCK_ALL_ASK:
 			basic_send_msg( client_lock_all_ask );
+			break;
+		case CLIENT_ASK_ZERO_BAT_THRESHOLDS:
+			basic_send_msg( client_ask_zero_bat_thresholds );
+			break;
+		case CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS:
+			basic_send_msg( client_ask_restore_def_bat_thresholds );
 			break;
 		}
 		wait_for_reply();

@@ -44,6 +44,9 @@ char msg_buff[msg_buff_size]={0};
 
 /* config section */
 /* config variables */
+const int def_batThrStrt=45;
+const int def_batThrStop=75;
+
 const int bat0ThrStrtVal=45;
 const int bat0ThrStopVal=75;
 const int bat1ThrStrtVal=45;
@@ -790,7 +793,7 @@ wall(const char* message){
 #endif
 
 void
-setThresholds(){
+setThresholds_default(){
 	fprintf(stderr, "Setting charge thresholds\n");
 	if(bat0HasThresholds){
 		intToFile(bat0ThrStrt, bat0ThrStrtVal);
@@ -798,6 +801,16 @@ setThresholds(){
 	if(bat1HasThresholds){
 		intToFile(bat1ThrStrt, bat1ThrStrtVal);
 		intToFile(bat1ThrStop, bat1ThrStopVal);}}
+
+void
+setThresholds_zero(){
+	fprintf(stderr, "Setting charge thresholds\n");
+	if(bat0HasThresholds){
+		intToFile(bat0ThrStrt, 0);
+		intToFile(bat0ThrStop, 100);}
+	if(bat1HasThresholds){
+		intToFile(bat1ThrStrt, 0);
+		intToFile(bat1ThrStop, 100);}}
 
 void
 chargerChangedState(){
@@ -976,6 +989,19 @@ handle_clients(int i){
 			//basic_send_msg(fds[i].fd, daemon_action_success);
 			lstn_cli_append(fd);
 			}
+		if( !strncmp( buf, client_ask_zero_bat_thresholds, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO ZERO BATTERY THRESHOLDS\n");
+			setThresholds_zero();
+			/* TODO validate if action was successful */
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			}
+		if( !strncmp( buf, client_ask_restore_def_bat_thresholds, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO RESTORE DEFAULT BATTERY THRESHOLDS\n");
+			setThresholds_default();
+			/* TODO validate if action was successful */
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			}
+
 	memset(buf,0,BUF_SIZE);}
 
 #define ACPID_EV_MAX 5
@@ -1185,7 +1211,7 @@ main(){
 	reconnect_to_acpid();
 	checkSysDirs();
 	detect_intel_pstate();
-	setThresholds();
+	setThresholds_default();
 	chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
 	zero_fds();
