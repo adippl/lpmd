@@ -233,20 +233,47 @@ connect_to_daemon(){
 	return(0);
 }
 
+//void
+//print_help_message(){
+//	fprintf("lpmctl - lpmd management utility\n");
+static const char* help_message =
+"lpmctl - lpmd configuration utility\n"
+"\n"
+"arguments:\n"
+" -zzz			ask daemon to suspend computer\n"
+" -suspend		ask daemon to suspend computer\n"
+" -ZZZ			ask daemon to hibernate computer\n"
+" -hibernate		ask daemon to hibernate computer\n"
+" -client_idle		notifu daemon about desktop inactivity\n"
+" -lock_all		ask daemon to lock all other screens\n"
+" -fullCharge		ask daemon remove charge thresholds\n"
+" -safeCharge		ask daemon restore default charge thresholds\n"
+" -forcePowersave	ask daemon to force cpu into powersave mode\n"
+" -forcePerformance	ask daemon to force cpu into performance mode\n"
+" -autoGov		ask daemon to restore automatic cpu governor management\n"
+" -daemon		launch lpmctl in daemon mode. listening for lpmd events\n"
+" -lock_cmd		pass screen locking command to lpmctl in daemon mode\n"
+;
+
 void
 parse_args(int argc, char** argv){
 	for(;argc>1&&argv[1][0]=='-';argc--,argv++){
-		if( !strncmp( &argv[1][1], "h", MSG_MAX_LEN) )
-			printf("TODO help message\n");
+		if( !strncmp( &argv[1][1], "h", MSG_MAX_LEN) ){
+			puts(help_message);
+			exit(EXIT_SUCCESS);}
 		
-		if( !strncmp( &argv[1][1], client_suspend_ask, MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], client_suspend_ask, MSG_MAX_LEN) ) /* -client_suspend_ask */
 			action = CLIENT_SUSPEND_ASK;
-		if( !strncmp( &argv[1][1], "suspend", MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], "suspend", MSG_MAX_LEN) ) /* -suspend */
+			action = CLIENT_SUSPEND_ASK;
+		if( !strncmp( &argv[1][1], "zzz", MSG_MAX_LEN) ) /* -zzz */
 			action = CLIENT_SUSPEND_ASK;
 		
-		if( !strncmp( &argv[1][1], client_hibernate_ask, MSG_MAX_LEN) )
+		if( !strncmp( &argv[1][1], client_hibernate_ask, MSG_MAX_LEN) ) /* -client_hibernate_ask */
 			action = CLIENT_HIBERNATE_ASK;
 		if( !strncmp( &argv[1][1], "hibernate", MSG_MAX_LEN) ) /* -hibernate */
+			action = CLIENT_HIBERNATE_ASK;
+		if( !strncmp( &argv[1][1], "ZZZ", MSG_MAX_LEN) ) /* -ZZZ */
 			action = CLIENT_HIBERNATE_ASK;
 		
 		if( !strncmp( &argv[1][1], client_notify_daemon_about_idle, MSG_MAX_LEN) )
@@ -255,7 +282,7 @@ parse_args(int argc, char** argv){
 			action = CLIENT_NOTIFY_DAEMON_ABOUT_IDLE;
 		if( !strncmp( &argv[1][1], "lock_all", MSG_MAX_LEN) ) /* -lock_all */
 			action = CLIENT_LOCK_ALL_ASK;
-
+		
 		if( !strncmp( &argv[1][1], "fullCharge", MSG_MAX_LEN) ) /* -fullCharge */
 			action = CLIENT_ASK_ZERO_BAT_THRESHOLDS;
 		if( !strncmp( &argv[1][1], "safeCharge", MSG_MAX_LEN) ) /* -safeCharge */
@@ -291,7 +318,7 @@ parse_args(int argc, char** argv){
 	}
 		
 	if( action==0 && mode_daemon == 0 ){
-		fprintf( stderr, "args are invalid\n");
+		fprintf( stderr, "invalid args\nuse lpmctl -h to display list of correct arguments\n");
 		exit(EXIT_FAILURE);}}
 
 
