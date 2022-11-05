@@ -62,7 +62,7 @@ const char* wallSuspendWarning="WARNING!!!\nWARNING!!!  battery0 is low.\nWARNIN
 const char* wallLowBatWarning="WARNING!!!\nWARNING!!!  battery0 is below 25%\n";
 
 /* /sys fs file paths */
-static const char* powerDir="/sys/class/power_supply";
+static const char* power_supply_class="/sys/class/power_supply";
 const char* bat0Dir="/sys/class/power_supply/BAT0";
 const char* bat1Dir="/sys/class/power_supply/BAT1";
 const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
@@ -93,7 +93,7 @@ const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_tur
 #define GOV_PERFORMANCE 1
 #define GOV_ONDEMAND 2
 void setGovernor(int governor);
-static const char *governor_string[] = { 
+static const char* governor_string[] = {
 	"powersave", "performance", "ondemand", };
 #define CPU_BOOST_ON 0
 #define CPU_BOOST_OFF 1
@@ -120,6 +120,22 @@ int numberOfCores=4;
 int acpid_connected=0;
 int lid_state=0;
 int lid_state_changed=1;
+
+
+
+struct power_class_dev {
+	int		type;
+	char	name[28]; /* should add up to 32 on intel machines */
+};
+#define POWER_SUPPLY_DEVS_MAX 8
+struct power_class_dev power_supply_devs[POWER_SUPPLY_DEVS_MAX] = {0};
+int power_supply_devs_size = 0;
+
+#define POWER_SUPPLY_MAINS 0
+#define POWER_SUPPLY_BATTERY 1
+static const char* class_power_supply[] = {
+	"Mains",
+	"Battery", };
 
 
 const int require_session_locks=0;
@@ -283,6 +299,20 @@ intToFile(const char* path, int i){
 	else{
 		perror(path);}}
 
+__attribute__ ((warn_unused_result)) int
+intToFile_check(const char* path, int i){
+	int rc=0;
+	FILE* f=fopen(path, "w");
+	if(f){
+		rc=fprintf(f, "%d", i);
+		fclose(f);
+		if( rc!=1 )
+			return(1);
+		return(0);}
+	else{
+		perror(path);
+		return(1);}}
+
 void
 strToFile(const char* path, char* str){
 	FILE* f=fopen(path, "w");
@@ -368,7 +398,7 @@ checkSysDirs_fd_reuse_test(){ //test function
 			fprintf(stderr, "BAT1 Detected\n");
 			if(bat1EnNow_fd==-1){
 				if( (bat1EnNow_fd = open(bat1EnNow, O_RDWR|O_APPEND)) ==- 1){
-					snprintf(msg_buff, msg_buff_size, 
+					snprintf(msg_buff, msg_buff_size,
 						"failed opening %s\n", bat1EnNow);
 					perror(msg_buff);}}
 			if(checkFile(bat1ThrStrt) &&  checkFile(bat1ThrStop)){
@@ -420,6 +450,71 @@ updatePowerPerc(){
 	if(bat1Exists){
 		a=fileToint(bat1EnNow);
 		bat1charge=(float)a/bat1maxCharge;}}
+void
+replace_newline_with_null(char* str, size_t str_size){
+	for(unsigned int i=0; i<str_size; i++){
+		if( str[i]=='\n' )
+			str[i]='\0';
+		if( str[i]=='\0' )
+			return;}}
+
+void
+detect_power_supply_class_devices(){
+	struct dirent *dir = NULL;
+	DIR* pdir = opendir( power_supply_class );
+	char temp_path[256]={0};
+	char type_buffer[32]={0};
+	FILE* typefile = NULL;
+	if( !pdir )
+		error_errno_msg_exit("couldn't open ", power_supply_class );
+	while( (dir = readdir(pdir)) != NULL){
+		if( dir->d_name[0] == '.' )
+			continue;
+		if( POWER_SUPPLY_DEVS_MAX <= power_supply_devs_size ){
+			/* our arrry is full, not adding new devices */
+			/* TODO add error message */
+			fprintf(stderr, "power_supply_devs array is full, not adding more devices\n");
+			continue;}
+		snprintf(
+			temp_path,
+			128,
+			"%s/%.32s/type",
+			power_supply_class,
+			dir->d_name);
+		typefile=NULL;
+		typefile = fopen( temp_path, "rb" );
+		if( !typefile )
+			error_errno_msg_exit("file is not read accessible ", temp_path);
+		fread( type_buffer, 1, 32, typefile);
+		fclose( typefile );
+		type_buffer[31]='\0';
+		replace_newline_with_null( type_buffer, 32);
+#ifdef DEBUG
+		fprintf(stderr,
+			"Detected power_supply class device: \"%s\", type: \"%s\":\n",
+			dir->d_name,
+			type_buffer);
+#endif
+		/* add device to array */
+		if( !strncmp( type_buffer, class_power_supply[ POWER_SUPPLY_MAINS ]  , 32))
+			power_supply_devs[ power_supply_devs_size ].type = POWER_SUPPLY_MAINS;
+		else if( !strncmp( type_buffer, class_power_supply[ POWER_SUPPLY_BATTERY ]  , 32))
+			power_supply_devs[ power_supply_devs_size ].type = POWER_SUPPLY_BATTERY;
+		else{
+			fprintf(stderr, "ERROR, %s/%.28s device type unkonwn: %s\n",
+				power_supply_class,
+				dir->d_name,
+				type_buffer);
+			continue;}
+		strncpy(
+			power_supply_devs[ power_supply_devs_size ].name,
+			dir->d_name,
+			28);
+		power_supply_devs[ power_supply_devs_size ].name[27]='\0';
+		power_supply_devs_size++;
+	}
+	closedir(pdir);
+	}
 
 int
 get_lid_stat_from_sys(){
@@ -793,8 +888,8 @@ cpu_boost_control(int gov_id){
 				fprintf(stderr,
 					"ERR %s wrong argument %d\n", __func__, gov_id);
 				return;}
-		current_cpu_boost = gov_id;
-		intToFile(intel_pstate_turbo_path, no_boost);}}
+		if( !intToFile_check(intel_pstate_turbo_path, no_boost) )
+			current_cpu_boost = gov_id;}}
 
 void
 restore_auto_cpu_power_management(){
@@ -1070,10 +1165,10 @@ handle_clients(int i){
 
 #define ACPID_EV_MAX 5
 void
-specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
+acpi_handle_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 		int i=0;
 #ifdef DEBUG
-		printf("DEBUG specific_events() handles %s\n", acpidEvent[0]);
+		printf("DEBUG acpi_handle_events() handles %s\n", acpidEvent[0]);
 #endif
 		//for(int i=0; i<ACPID_EV_MAX; i++){
 		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){
@@ -1094,7 +1189,10 @@ specific_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 			if(i!=lid_state){
 				lid_state_changed=1;}
 				puts("lid state changed");
-			lid_state=i;}}
+			lid_state=i;}
+		// TODO detect battery disconnection
+		//if( !strncmp("battery", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )
+			}
 
 int
 handle_read_from_acpid_sock(){
@@ -1119,7 +1217,7 @@ handle_read_from_acpid_sock(){
 				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
 #endif
 			token = strtok_r(NULL, " ", &strtok_saveptr);}
-		specific_events(acpidEvent);}
+		acpi_handle_events(acpidEvent);}
 	else if( numRead <= 0 ){
 		if(acpid_connected){
 			fds[D_ACPID_SOCK].fd=0;
@@ -1266,7 +1364,7 @@ checkForLowPower(){
 
 int
 main(){
-	if(!checkDir(powerDir))
+	if(!checkDir(power_supply_class))
 		exit(1);
 	if(checkFile(powerState)){
 		powerStateExists=0;}
@@ -1282,6 +1380,7 @@ main(){
 	daemon_sock_create();
 	daemon_adm_sock_create();
 	setup_sigaction();
+	detect_power_supply_class_devices();
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
 			puts("DEBUG main loop start\n");
