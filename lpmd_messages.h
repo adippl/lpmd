@@ -63,6 +63,14 @@ const char* client_ask_zero_bat_thresholds="client_ask_zero_bat_thresholds";
 #define CLIENT_ASK_ZERO_BAT_THRESHOLDS 107
 const char* client_ask_restore_def_bat_thresholds="client_ask_restore_def_bat_thresholds";
 #define CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS 108
+const char* client_ask_for_powersave_gov_lock="client_ask_for_powersave_gov_lock";
+#define CLIENT_ASK_FOR_POWERSAVE_GOV_LOCK 109
+const char* client_ask_for_performance_gov_lock="client_ask_for_performance_gov_lock";
+#define CLIENT_ASK_FOR_PERFORMANCE_GOV_LOCK 110
+const char* client_ask_for_automatic_governor_control="client_ask_for_automatic_governor_control";
+#define CLIENT_ASK_FOR_AUTOMATIC_GOVERNOR_CONTROL 111
+
+
 const char* cl_new="cl_new";
 #define cl_new 199
 

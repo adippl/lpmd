@@ -55,8 +55,6 @@ const float batMinSleepThreshold=0.15f;
 const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
 const int manageGovernors=1;
-const char* powersaveGovernor_str="powersave";
-const char* performanceGovernor_str="performance";
 const int syncBeforeSuspend=1;
 const int suspendDelay=60;
 const int wallNotify=1;
@@ -93,12 +91,16 @@ const char* intel_pstate_turbo_path="/sys/devices/system/cpu/intel_pstate/no_tur
 //enum governor { powersave=0, performance=1 , ondemand=2 };
 #define GOV_POWERSAVE 0
 #define GOV_PERFORMANCE 1
-#define GOV_ONDEMAND 1
+#define GOV_ONDEMAND 2
 void setGovernor(int governor);
 static const char *governor_string[] = { 
 	"powersave", "performance", "ondemand", };
-int cpu_boost_on=0;
-int cpu_boost_off=1;
+#define CPU_BOOST_ON 0
+#define CPU_BOOST_OFF 1
+int user_lock_governor=0;
+int current_governor=0;
+int user_lock_cpu_boost=0;
+int current_cpu_boost=0;
 
 /* runtime variables */
 int intel_pstate_present=0;
@@ -182,13 +184,13 @@ void
 action_charger_connected(){
 	fprintf(stderr, "Charger connected\n");
 	setGovernor(GOV_PERFORMANCE);
-	cpu_boost_control(cpu_boost_on);
+	cpu_boost_control(CPU_BOOST_ON);
 	}
 void
 action_charger_disconnected(){
 	fprintf(stderr, "Charger disconnected\n");
 	setGovernor(GOV_POWERSAVE);
-	cpu_boost_control(cpu_boost_off);
+	cpu_boost_control(CPU_BOOST_OFF);
 	lowBatWarning_warned=0;}
 
 
@@ -726,7 +728,7 @@ setup_sigaction(){
 /* END signal section */
 
 void
-setGovernor(int governor){
+_setGovernor(int governor){
 	const char* gov=NULL;
 	char path[SSTR]={0};
 	if(manageGovernors){
@@ -739,10 +741,10 @@ setGovernor(int governor){
 				return;}
 		switch(governor){
 			case GOV_POWERSAVE:
-				gov=powersaveGovernor_str;
+				gov = governor_string[ GOV_POWERSAVE ];
 				break;
 			case GOV_PERFORMANCE:
-				gov=performanceGovernor_str;
+				gov = governor_string[ GOV_PERFORMANCE ];
 				break;
 			default:
 				fprintf(stderr,
@@ -757,23 +759,55 @@ setGovernor(int governor){
 			"not switching cpu governor, governor management disabled\n");}
 
 void
-cpu_boost_control(int i){
-	int no_boost=-1;
+setGovernor(int governor){
+	if( user_lock_governor )
+		fprintf(stderr, 
+			"user locked governor at %s, not changing current governor\n",
+			governor_string[ current_governor ]);
+	else{
+		_setGovernor(governor);
+		current_governor = governor;
+	}
+}
+
+void
+cpu_boost_control(int gov_id){
+	int no_boost=-1; /* /sys/devices/system/cpu/intel_pstate/no_turbo */
+	if( user_lock_cpu_boost )
+		fprintf(stderr, 
+			"user locked cpu boost as %s, not changing current boost setting\n",
+			current_cpu_boost ? "enabled" : "disabled"
+			);
+		
 	if(intel_pstate_present){
-		switch(chargerConnected){
-			case 0:
+		switch( gov_id ){
+			case CPU_BOOST_OFF:
 				no_boost=1;
 				fprintf(stderr, "disabling cpu boost via intel_pstate\n");
 				break;
-			case 1:
+			case CPU_BOOST_ON:
 				no_boost=0;
 				fprintf(stderr, "enabling cpu boost via intel_pstate\n");
 				break;
 			default:
 				fprintf(stderr,
-					"ERR %s wrong argument %d\n", __func__, i);
+					"ERR %s wrong argument %d\n", __func__, gov_id);
 				return;}
+		current_cpu_boost = gov_id;
 		intToFile(intel_pstate_turbo_path, no_boost);}}
+
+void
+restore_auto_cpu_power_management(){
+	user_lock_governor = 0;
+	user_lock_cpu_boost = 0;
+	if( chargerConnected ){
+		setGovernor( GOV_PERFORMANCE );
+		cpu_boost_control( CPU_BOOST_ON );}
+	else{
+		setGovernor( GOV_POWERSAVE );
+		cpu_boost_control( CPU_BOOST_OFF );}
+	}
+
 
 void
 wall(const char* message){
@@ -998,6 +1032,36 @@ handle_clients(int i){
 		if( !strncmp( buf, client_ask_restore_def_bat_thresholds, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT ASKED TO RESTORE DEFAULT BATTERY THRESHOLDS\n");
 			setThresholds_default();
+			/* TODO validate if action was successful */
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			}
+		if( !strncmp( buf, client_ask_for_powersave_gov_lock, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO LOCK CPU GOVERNOR IN POWERSAVE MODE\n");
+			user_lock_governor = 0;
+			user_lock_cpu_boost = 0;
+			setGovernor( GOV_POWERSAVE );
+			cpu_boost_control( CPU_BOOST_OFF );
+			user_lock_governor = 1;
+			user_lock_cpu_boost = 1;
+			/* TODO validate if action was successful */
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			}
+		if( !strncmp( buf, client_ask_for_performance_gov_lock, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO LOCK CPU GOVERNOR IN PERFORMANCE MODE\n");
+			user_lock_governor = 0;
+			user_lock_cpu_boost = 0;
+			setGovernor( GOV_PERFORMANCE );
+			cpu_boost_control( CPU_BOOST_ON );
+			user_lock_governor = 1;
+			user_lock_cpu_boost = 1;
+			/* TODO validate if action was successful */
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			}
+		if( !strncmp( buf, client_ask_for_automatic_governor_control, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO RESTORE AUTOMATIC CPU GOVERNOR MODE\n");
+			//user_lock_governor = 0;
+			//user_lock_cpu_boost = 0;
+			restore_auto_cpu_power_management();
 			/* TODO validate if action was successful */
 			basic_send_msg(fds[i].fd, daemon_action_success);
 			}

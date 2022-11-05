@@ -261,6 +261,13 @@ parse_args(int argc, char** argv){
 		if( !strncmp( &argv[1][1], "safeCharge", MSG_MAX_LEN) ) /* -safeCharge */
 			action = CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS;
 		
+		if( !strncmp( &argv[1][1], "forcePowersave", MSG_MAX_LEN) ) /* -forcePowersave */
+			action = CLIENT_ASK_FOR_POWERSAVE_GOV_LOCK;
+		if( !strncmp( &argv[1][1], "forcePerformance", MSG_MAX_LEN) ) /* -forcePerformance */
+			action = CLIENT_ASK_FOR_PERFORMANCE_GOV_LOCK;
+		if( !strncmp( &argv[1][1], "autoGov", MSG_MAX_LEN) ) /* -autoGov */
+			action = CLIENT_ASK_FOR_AUTOMATIC_GOVERNOR_CONTROL;
+		
 		if( !strncmp( &argv[1][1], "daemon", MSG_MAX_LEN) )
 			mode_daemon = 1;
 		
@@ -426,6 +433,16 @@ main(int argc, char** argv){
 			break;
 		case CLIENT_ASK_RESTORE_DEF_BAT_THRESHOLDS:
 			basic_send_msg( client_ask_restore_def_bat_thresholds );
+			break;
+		
+		case CLIENT_ASK_FOR_POWERSAVE_GOV_LOCK:
+			basic_send_msg( client_ask_for_powersave_gov_lock );
+			break;
+		case CLIENT_ASK_FOR_PERFORMANCE_GOV_LOCK:
+			basic_send_msg( client_ask_for_performance_gov_lock );
+			break;
+		case CLIENT_ASK_FOR_AUTOMATIC_GOVERNOR_CONTROL:
+			basic_send_msg( client_ask_for_automatic_governor_control );
 			break;
 		}
 		wait_for_reply();
