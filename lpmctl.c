@@ -341,8 +341,9 @@ handle_clients(int fd){
 #ifdef DEBUG
 			fprintf(stderr, "action success\n");
 #endif
-			close(conn_fd);
-			exit(EXIT_SUCCESS);
+			if( !mode_daemon ){ /* exit if running in oneshot mode */
+				close(conn_fd);
+				exit(EXIT_SUCCESS);}
 				}
 		if( !strncmp( buf, daemon_action_refuse, MSG_MAX_LEN)){
 #ifdef DEBUG
@@ -361,14 +362,19 @@ handle_clients(int fd){
 			lock_screen();
 			return;
 			}
-		if( !strncmp( buf, suspend_sleep, MSG_MAX_LEN)){
-			fprintf(stderr, "lpmd is suspending system\n");
+		if( !strncmp( buf, notif_suspend_sleep, MSG_MAX_LEN)){
+			fprintf(stderr, "lpmd is suspending the system\n");
 			//TODO reaction to syspend
 			return;
 			}
-		if( !strncmp( buf, hibernate_sleep, MSG_MAX_LEN)){
-			fprintf(stderr, "lpmd is hibernating system\n");
+		if( !strncmp( buf, notif_hibernate_sleep, MSG_MAX_LEN)){
+			fprintf(stderr, "lpmd is hibernating the system\n");
 			//TODO react to hibernate
+			return;
+			}
+		if( !strncmp( buf, notif_suspend, MSG_MAX_LEN)){
+			fprintf(stderr, "lpmd suspending the system\n");
+			//TODO react to suspend
 			return;
 			}
 	memset(buf,0,BUF_SIZE);}

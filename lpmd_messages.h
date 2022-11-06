@@ -4,22 +4,28 @@
 #define MSG_MAX_LEN 256
 //long unsigned int MSG_MAX_LEN = 256;
 
-const char* lid_close="lid_close";
-#define LID_CLOSE 1
-const char* lid_open="lid_open";
-#define LID_OPEN 2
-const char* charger_connected="charger_connected";
-#define CHARGER_CONNECTED 3
-const char* charger_disconnected="charger_disconnected";
-#define CHARGER_DISCONNECTED 4
-const char* suspend_sleep="suspend_sleep";
-#define SUSPEND_SLEEP 5
-const char* suspend_wake="suspend_wake";
-#define SUSPEND_WAKE 6
-const char* hibernate_sleep="hibernate_sleep";
-#define HIBERNATE_SLEEP 7
-const char* hibernate_wake="hibernate_wake";
-#define HIBERNATE_WAKE 8
+const char* notif_AA="notif_AA";
+#define NOTIF_AA 0
+const char* notif_lid_close="notif_lid_close";
+#define NOTIF_LID_CLOSE 1
+const char* notif_lid_open="notif_lid_open";
+#define NOTIF_LID_OPEN 2
+const char* notif_charger_connected="notif_charger_connected";
+#define NOTIF_CHARGER_CONNECTED 3
+const char* notif_charger_disconnected="notif_charger_disconnected";
+#define NOTIF_CHARGER_DISCONNECTED 4
+const char* notif_suspend_sleep="notif_suspend_sleep";
+#define NOTIF_SUSPEN_SLEEP 5
+const char* notif_suspend_wake="notif_suspend_wake";
+#define NOTIF_SUSPEN_WAKE 6
+const char* notif_hibernate_sleep="notif_hibernate_sleep";
+#define NOTIF_HIBERNATE_SLEEP 7
+const char* notif_hibernate_wake="notif_hibernate_wake";
+#define NOTIF_HIBERNATE_WAKE 8
+const char* notif_suspend="notif_suspend";
+#define NOTIF_SUSPEND 9
+//const char* notif_suspend_wake="notif_suspend_wake";
+//#define NOTIF_SUSPEND_WAKE 10
 
 const char* client_idle_action="client_idle_action";
 #define CLIENT_IDLE_ACTION 30

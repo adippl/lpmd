@@ -191,10 +191,12 @@ void send_msg_to_listening_lpmctl(const char* msg);
 void
 action_lid_open(){
 	fprintf(stderr, "Lid opened\n");
+	send_msg_to_listening_lpmctl( notif_lid_open );
 	}
 void
 action_lid_close(){
 	fprintf(stderr, "Lid closed\n");
+	send_msg_to_listening_lpmctl( notif_lid_close );
 	}
 void
 action_charger_connected(){
@@ -216,7 +218,7 @@ suspend(){
 		send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
 	else
 		usleep(1000*100); /* sleep 100ms */
-	send_msg_to_listening_lpmctl(suspend_sleep);
+	send_msg_to_listening_lpmctl( notif_suspend_sleep );
 #ifdef DEBUG
 	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't put this machine to sleep. Compile in normal mode to enable this functionality\n");
 	return;}
@@ -236,8 +238,8 @@ suspend(){
 
 void
 hibernate(){
-	send_msg_to_listening_lpmctl(daemon_ask_for_screen_locks);
-	send_msg_to_listening_lpmctl(hibernate_sleep);
+	send_msg_to_listening_lpmctl( daemon_ask_for_screen_locks );
+	send_msg_to_listening_lpmctl( notif_hibernate_sleep );
 #ifdef DEBUG
 	fprintf(stderr , "THIS IS DEBUG MODE, lpm WON't hibernate this machine. Compile in normal mode to enable this functionality\n");
 	return;}
@@ -1111,6 +1113,13 @@ handle_clients(int i){
 		if( !strncmp( buf, client_lock_ask, MSG_MAX_LEN)){
 			fprintf(stderr, "CLIENT ASKED TO LOCK ALL SESSIONS\n");
 			basic_send_msg(fds[i].fd, daemon_action_success);
+			send_msg_to_listening_lpmctl( daemon_ask_for_screen_locks );
+			//TODO do something
+			}
+		if( !strncmp( buf, client_lock_all_ask, MSG_MAX_LEN)){
+			fprintf(stderr, "CLIENT ASKED TO LOCK ALL SESSIONS\n");
+			basic_send_msg(fds[i].fd, daemon_action_success);
+			send_msg_to_listening_lpmctl( daemon_ask_for_screen_locks );
 			//TODO do something
 			}
 		if( !strncmp( buf, client_listen_to_daemon, MSG_MAX_LEN)){
