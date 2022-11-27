@@ -11,7 +11,7 @@ ifeq ($(CC),)
  CC := cc 
 endif
 ifeq ($(CFLAGS),)
- CFLAGS := -Wall -Wextra -pedantic -O0 -g
+ CFLAGS := -Wall -Wextra -pedantic -fsanitize=undefined -fsanitize=address -O0 -g
 endif
 
 .PHONY: build

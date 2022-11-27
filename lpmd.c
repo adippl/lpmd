@@ -203,23 +203,23 @@ void send_msg_to_listening_lpmctl(const char* msg);
 
 void
 action_lid_open(){
-	fprintf(stderr, "Lid opened\n");
+	fprintf(stdout, "Lid opened\n");
 	send_msg_to_listening_lpmctl( notif_lid_open );
 	}
 void
 action_lid_close(){
-	fprintf(stderr, "Lid closed\n");
+	fprintf(stdout, "Lid closed\n");
 	send_msg_to_listening_lpmctl( notif_lid_close );
 	}
 void
 action_charger_connected(){
-	fprintf(stderr, "Charger connected\n");
+	fprintf(stdout, "Charger connected\n");
 	setGovernor(GOV_PERFORMANCE);
 	cpu_boost_control(CPU_BOOST_ON);
 	}
 void
 action_charger_disconnected(){
-	fprintf(stderr, "Charger disconnected\n");
+	fprintf(stdout, "Charger disconnected\n");
 	setGovernor(GOV_POWERSAVE);
 	cpu_boost_control(CPU_BOOST_OFF);
 	lowBatWarning_warned=0;}
@@ -356,14 +356,14 @@ detectNumberOfCpus(){
 void
 detect_intel_pstate(){
 	if(checkDir(intel_pstate_path)){
-		fprintf(stderr, 
-			"detected intel_pstate, enabling turbo boost control\n");
+		fprintf(stdout,
+			"Detected intel_pstate, enabling turbo boost control\n");
 			intel_pstate_present=1;
 		if( access( intel_pstate_turbo_path, R_OK|W_OK ) ){
-			fprintf(stderr, 
+			fprintf(stdout,
 				"%s is not writable, disabling turbo boost control\n",
 				intel_pstate_turbo_path);
-			//intel_pstate_present=0; //TODO reenable
+			intel_pstate_present=0; //TODO reenable
 			}}}
 
 int
@@ -482,12 +482,12 @@ populate_sys_paths(){
 	int bat1set=0;
 	/* listing array backwards */
 	for(int i=power_supply_devs_size-1; i>=0; i--){
-#ifdef DEBUG
-		fprintf(stderr,
-			"listing power_supply class device: \"%s\", type: \"%s\":\n",
-			power_supply_devs[i].name,
-			class_power_supply[ power_supply_devs[i].type ]);
-#endif
+//#ifdef DEBUG
+//		fprintf(stderr,
+//			"listing power_supply class device: \"%s\", type: \"%s\":\n",
+//			power_supply_devs[i].name,
+//			class_power_supply[ power_supply_devs[i].type ]);
+//#endif
 		/* setup for ac adapter */
 		if( power_supply_devs[i].type == POWER_SUPPLY_MAINS ){
 			snprintf( chargerConnectedPath,
@@ -577,7 +577,7 @@ checkSysDirs(){
 	if(i!=bat0Exists){
 		if(i){
 			bat0Exists=1;
-			fprintf(stderr, "BAT0 Detected\n");
+			fprintf(stdout, "BAT0 Detected\n");
 			bat0maxCharge=fileToint(bat0EnFull);
 			if(checkFile(bat0ThrStrt) && checkFile(bat0ThrStop)){
 				bat0HasThresholds=1;}}
@@ -585,12 +585,12 @@ checkSysDirs(){
 			bat0Exists=0;
 			bat0HasThresholds=0;
 			rescan_class_power=1;
-			fprintf(stderr, "BAT0 Missing\n");}}
+			fprintf(stdout, "BAT0 Missing\n");}}
 	i=checkDir(bat1Dir);
 	if(i!=bat1Exists){
 		if(i){
 			bat1Exists=1;
-			fprintf(stderr, "BAT1 Detected\n");
+			fprintf(stdout, "BAT1 Detected\n");
 			bat1maxCharge=fileToint(bat1EnFull);
 			if(checkFile(bat1ThrStrt) && checkFile(bat1ThrStop)){
 				bat1HasThresholds=1;}}
@@ -598,7 +598,8 @@ checkSysDirs(){
 			bat1Exists=0;
 			bat1HasThresholds=0;
 			rescan_class_power=1;
-			fprintf(stderr, "BAT1 Missing\n");}}
+			fprintf(stdout, "BAT1 Missing\n");}}
+	/* bakcup, use only when working without acpid */
 	if( ! acpid_connected && rescan_class_power){
 		fprintf(stdout, "battery disconnected, rescanning power devices\n");
 		zero_device_path_names();
@@ -637,7 +638,7 @@ get_lid_stat_from_sys(){
 		else if(!strncmp("closed", token ,10)){
 			i=0;}
 		else{
-			printf("DEBUG strange LID state \"%s\"\n", token);}
+			fprintf(stderr, "DEBUG strange LID state \"%s\"\n", token);}
 		if(i!=lid_state){
 			lid_state_changed=1;
 			lid_state=i;}
@@ -715,6 +716,7 @@ daemon_sock_create(){
 	fds[D_SOCK].fd=daemon_sock;
 	fds[D_SOCK].events=POLLIN;
 	nfds++;
+	fprintf(stderr, "Created listening socket %s\n", daemon_sock_path);
 	}
 
 void
@@ -780,7 +782,9 @@ daemon_adm_sock_create(){
 		error_errno_msg_exit("listen command failed",NULL);
 	fds[D_ADM_SOCK].fd=daemon_adm_sock;
 	fds[D_ADM_SOCK].events=POLLIN;
-	nfds++;}
+	nfds++;
+	fprintf(stderr, "Created listening admin socket %s\n", daemon_adm_sock_path);
+	}
 
 void
 daemon_adm_sock_close(){
@@ -1060,7 +1064,7 @@ print_time_no_newline(){
 	timer = time(NULL);
 	tm_info = localtime(&timer);
 	strftime(buffer, 26, "%Y-%m-%d %H:%M:%S", tm_info);
-	printf("%s ", buffer);}
+	fprintf(stderr, "%s ", buffer);}
 
 void
 updateChargerState(){
@@ -1100,7 +1104,7 @@ connect_to_acpid(){
 		
 		perror("acpid socket connect");
 		return(1);}
-	fprintf(stderr, "connected to acpid at %s\n", acpid_sock_path);
+	fprintf(stdout, "connected to acpid at %s\n", acpid_sock_path);
 	acpid_connected=1;
 	fds[D_ACPID_SOCK].fd=fd_acpid;
 	fds[D_ACPID_SOCK].events=POLLIN;
@@ -1265,42 +1269,39 @@ void
 acpi_handle_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 		int i=0;
 #ifdef DEBUG
-		printf("DEBUG acpi_handle_events() handles %s\n", acpidEvent[0]);
+		fprintf(stderr, "DEBUG acpi_handle_events() handles %s\n", acpidEvent[0]);
 #endif
 		//for(int i=0; i<ACPID_EV_MAX; i++){
 		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){
 			i=atoi(acpidEvent[3]);
-			printf("charger state %d\n", i);
+			fprintf(stderr, "charger state from acpid %d\n", i);
 			if(i != chargerConnected){
 				chargerConnected=i;
 				chargerChangedState();}}
 		if( !strncmp("button/lid", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN ) && 
 			!strncmp("LID", acpidEvent[1] ,ACPID_STRCMP_MAX_LEN )){
-			
-			puts(acpidEvent[1]);
-			puts(acpidEvent[2]);
 			if(!strncmp("open", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN )){
 				i=1;}
 			if(!strncmp("close", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN)){
 				i=0;}
 			if(i!=lid_state){
 				lid_state_changed=1;}
-				puts("lid state changed");
+				fprintf(stderr, "lid state changed\n");
 			lid_state=i;}
 		if( !strncmp("battery", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){ 
 			/* handle battery disconnect */
+			/* these values work on lenovo thinkpad x270 */
 			if( !strncmp("00000080", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN ) &&
 			!strncmp("00000001", acpidEvent[3] ,ACPID_STRCMP_MAX_LEN )){
-			/* these values work on lenovo thinkpad x270 */
-				fprintf(stdout, "battery connected, rescanning power devices\n");
+				fprintf(stderr, "battery state channge, rescanning power devices\n");
 				zero_device_path_names();
 				detect_power_supply_class_devices();
 				populate_sys_paths();}
 			/* handle battery connection */
+			/* these values work on lenovo thinkpad x270 */
 			if( !strncmp("00000003", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN ) &&
 			!strncmp("00000000", acpidEvent[3] ,ACPID_STRCMP_MAX_LEN )){
-			/* these values work on lenovo thinkpad x270 */
-				fprintf(stdout, "battery disconnected, rescanning power devices\n");
+				fprintf(stderr, "battery disconnected, rescanning power devices\n");
 				zero_device_path_names();
 				detect_power_supply_class_devices();
 				populate_sys_paths();}
@@ -1317,14 +1318,14 @@ handle_read_from_acpid_sock(){
 			if(buf[i]=='\n')
 				buf[i]='\0';}
 #ifdef DEBUG
-		printf("acpid event\n");
+		fprintf(stderr, "acpid event\n");
 #endif
 		memset(acpidEvent, 0, sizeof(acpidEvent));
 		token = strtok_r(buf, " ", &strtok_saveptr);
 		for(int i=0; (i<ACPID_EV_MAX)&&(token); i++){
 			strncpy(acpidEvent[i], token, ACPID_STRCMP_MAX_LEN-1);
 #ifdef DEBUG
-			printf("\t%d \"%s\" len:%lo\n",i,
+			fprintf(stderr, "\t%d \"%s\" len:%lo\n",i,
 				acpidEvent[i],
 				strnlen(acpidEvent[i],ACPID_STRCMP_MAX_LEN));
 #endif
@@ -1388,17 +1389,17 @@ poll_fds(){
 	switch(rc){
 	case(0): // timeout
 #ifdef DEBUG
-		puts("DEBUG poll timeout");
+		fprintf(stderr, "DEBUG poll timeout\n");
 #endif
 		return;
 	case(-1): //error
 #ifdef DEBUG
-		puts("DEBUG poll error");
+		fprintf(stderr, "DEBUG poll error\n");
 #endif
 		break;
 	default:
 #ifdef DEBUG
-		puts("DEBUG poll rw");
+		fprintf(stderr, "DEBUG poll rw\n");
 #endif
 		for(int i=0; i < current_nfds ;i++){
 			if( fds[i].revents == 0 )
@@ -1480,7 +1481,7 @@ main(){
 		exit(1);
 	if(checkFile(powerState)){
 		powerStateExists=0;}
-	fprintf(stderr, "Lpmd starts\n");
+	fprintf(stdout, "Lpmd starts\n");
 	detectNumberOfCpus();
 	reconnect_to_acpid();
 	detect_power_supply_class_devices();
@@ -1496,8 +1497,8 @@ main(){
 	setup_sigaction();
 #ifdef DEBUG
 		for(int i=0; i<DEBUG_CYCLES; i++){
-			puts("DEBUG main loop start\n");
-			printf("nfds %d\n", nfds);
+			fprintf(stderr, "\n\nDEBUG main loop start\n");
+			fprintf(stderr,"nfds %d\n", nfds);
 #else
 		for(;;){
 #endif
@@ -1512,9 +1513,10 @@ main(){
 #ifdef DEBUG
 			print_time_no_newline();
 			if(bat1Exists)
-				printf("bat0 %f bat1 %f\n",bat0charge,bat1charge);
+				fprintf(stderr, "bat0 %f bat1 %f",bat0charge,bat1charge);
 			else
-				printf("bat0 %f\n",bat0charge);
+				fprintf(stderr, "bat0 %f",bat0charge);
+			fprintf(stderr, "\n");
 #endif
 			if(!acpid_connected)
 				sleep(loopInterval);
