@@ -116,7 +116,7 @@ int current_cpu_boost=0;
 
 /* runtime variables */
 int intel_pstate_present=0;
-char acpi_lid_path_exist=-1;
+char acpi_lid_path_exist=0;
 int powerStateExists=1;
 int bat0Exists=-1;
 int bat1Exists=-1;
@@ -130,7 +130,7 @@ int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
 int acpid_connected=0;
-int lid_state=0;
+int lid_state=-1;
 int lid_state_changed=1;
 
 
@@ -770,13 +770,13 @@ daemon_adm_sock_create(){
 	if(chmod(daemon_adm_sock_path, 0660)==-1)
 		error_errno_msg_exit("chmod failed on socket",NULL);
 	
-/* don't set group to run rootless in test */
-#ifndef DEBUG
+///* don't set group to run rootless in test */
+//#ifndef DEBUG
 	chown_custom(
 		daemon_adm_sock_path,
 		daemon_adm_socket_user,
 		daemon_adm_socket_group);
-#endif
+//#endif
 	
 	if( listen(daemon_adm_sock, LISTEN_BACKLOG) == -1 )
 		error_errno_msg_exit("listen command failed",NULL);
@@ -1044,7 +1044,7 @@ chargerChangedState(){
 
 void
 lid_state_handler(){
-	if(!acpid_connected){
+	if(!acpid_connected && acpi_lid_path_exist ){
 		// acpid connection lost 
 		// falling back to checing via /sys path
 		get_lid_stat_from_sys();}
@@ -1068,9 +1068,14 @@ print_time_no_newline(){
 
 void
 updateChargerState(){
+/* re-enable chargerConnectedPath style checks on pinebook-pro */
+/* acpid on pinebook-pro doesn't detect charger connects/disconnects */
+/* TODO conditiona switch instead of broad arch wide */
+#ifndef __aarch64__
 	if(acpid_connected) return; // skip primitive check if acpid is avaliable
+#endif
 #ifdef DEBUG
-	puts(" updateChargerState ");
+	fprintf(stderr, "updateChargerState\n");
 #endif
 	int c=fileToint(chargerConnectedPath);
 	if(c != chargerConnected){

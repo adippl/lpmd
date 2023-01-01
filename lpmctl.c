@@ -253,12 +253,17 @@ static const char* help_message =
 " -autoGov		ask daemon to restore automatic cpu governor management\n"
 " -daemon		launch lpmctl in daemon mode. listening for lpmd events\n"
 " -lock_cmd		pass screen locking command to lpmctl in daemon mode\n"
+" -h			print this help message\n"
+" --help			print this help message\n"
 ;
 
 void
 parse_args(int argc, char** argv){
 	for(;argc>1&&argv[1][0]=='-';argc--,argv++){
 		if( !strncmp( &argv[1][1], "h", MSG_MAX_LEN) ){
+			puts(help_message);
+			exit(EXIT_SUCCESS);}
+		if( !strncmp( &argv[1][1], "-help", MSG_MAX_LEN) ){
 			puts(help_message);
 			exit(EXIT_SUCCESS);}
 		

@@ -1,4 +1,5 @@
-lpmd is a minimal power management daemon for linux
+lpmd is a small power management daemon for linux laptops
+
 main features
 	* support for 2 batteries (BAT0 BAT1)
 	* change of cpu governor on connect/disconnect of power adapter
@@ -9,12 +10,17 @@ main features
 	* wall style message to all pseudo TTYs (not to /dev/tty*)
 	* openrc initscript with logger started by start-stop-daemon
 	* basic ebuild installing lpmd from git
-	* <300 lines of code. You can (probably) easily understand it.
+	* lockscreen management and lockscreen activation before suspend
+	* suspend and hibernation command for users in weel group
+programs:
+	lpmd
+		lpmd: daemon running as root. It manages all important features.
+	lpmctl
+		lpmctl: user's program responsible for sending messages to lpmd
 
 >supported distros and machines?
-	I created it for my thinkpad x270 running gentoo. It's mostly hardcoded for my
-system. It should work on your system as long as paths to /sys filesystem look
-the same on your system. No guarantees.
+	I created it for my thinkpad x270 running gentoo. I've also tested it on 
+t480 and Pinebook Pro No guarantees.
 
 >compilers?
 testsed on gcc-9.3.0 and tcc 0.9.27
@@ -23,4 +29,4 @@ lpmd can be used with tcc -run option
 >Is this a shell script?
 Yes
 
-inspiration: OpenBSD's apmd
+inspiration: OpenBSD's apmd, elogind
