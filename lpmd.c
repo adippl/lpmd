@@ -23,6 +23,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <time.h>
+#include <stdbool.h>
 
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -61,6 +62,7 @@ const int suspendDelay=60;
 const int wallNotify=1;
 const char* wallSuspendWarning="WARNING!!!\nWARNING!!!  battery0 is low.\nWARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
 const char* wallLowBatWarning="WARNING!!!\nWARNING!!!  battery0 is below 25%\n";
+int suspend_on_lid_close=true;
 
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
@@ -152,6 +154,7 @@ void setGovernor(int governor);
 void cpu_boost_control(int i);
 void wall(const char* message);
 void send_msg_to_listening_lpmctl(const char* msg);
+void lid_closed_suspend();
 
 void
 action_lid_open(){
@@ -162,6 +165,7 @@ void
 action_lid_close(){
 	fprintf(stdout, "Lid closed\n");
 	send_msg_to_listening_lpmctl( notif_lid_close );
+	lid_closed_suspend();
 	}
 void
 action_charger_connected(){
@@ -174,7 +178,11 @@ action_charger_disconnected(){
 	fprintf(stdout, "Charger disconnected\n");
 	setGovernor(GOV_POWERSAVE);
 	cpu_boost_control(CPU_BOOST_OFF);
-	lowBatWarning_warned=0;}
+	lowBatWarning_warned=0;
+	if( suspend_on_lid_close ){
+		lid_closed_suspend();
+		}
+	}
 
 
 void
@@ -221,6 +229,12 @@ hibernate(){
 	else{
 		perror(powerState);}}
 #endif
+
+void
+lid_closed_suspend(){ /* untested; TODO TEST */
+	if( suspend_on_lid_close && !chargerConnected && !lid_state ){
+		fprintf(stderr, "DEBUG lid closed, suspending computer\n");
+		suspend();}}
 
 int
 checkFile(const char* path){
@@ -1268,14 +1282,15 @@ main(){
 		powerStateExists=0;}
 	fprintf(stdout, "Lpmd starts\n");
 	detectNumberOfCpus();
-	reconnect_to_acpid();
 	detect_power_supply_class_devices();
 	populate_sys_paths();
 	checkSysDirs();
 	detect_intel_pstate();
 	setThresholds_default();
-	chargerConnected=fileToint(chargerConnectedPath);
+	//chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
+	updateChargerState(); /* detect charger before acpid is connected */
+	reconnect_to_acpid();
 	zero_fds();
 	daemon_sock_create();
 	daemon_adm_sock_create();
