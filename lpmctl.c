@@ -13,6 +13,8 @@
 #include <poll.h>
 struct pollfd fds[1] = {0};
 
+#include "shared.h"
+
 
 int mode_daemon=0;
 int action=0;
@@ -142,6 +144,26 @@ setup_lock_command(){
 		lock_cmd_ptr = (char*)&lock_cmd;
 		printf("found /usr/bin/i3lock, setting it as lock_cmd\n");
 		return;}}
+
+void
+dump_detected_power_devices(){
+	
+	zero_device_path_names();
+	detect_power_supply_class_devices();
+	populate_sys_paths();
+	
+	printf("bat0Dir = %s\n", bat0Dir);
+	printf("bat1Dir = %s\n", bat1Dir);
+	printf("bat0ThrStrt = %s\n", bat0ThrStrt);
+	printf("bat0ThrStop = %s\n", bat0ThrStop);
+	printf("bat1ThrStrt = %s\n", bat1ThrStrt);
+	printf("bat1ThrStop = %s\n", bat1ThrStop);
+	printf("bat0EnNow = %s\n", bat0EnNow);
+	printf("bat1EnNow = %s\n", bat1EnNow);
+	printf("chargerConnectedPath = %s\n", chargerConnectedPath);
+	printf("bat0EnFull = %s\n", bat0EnFull);
+	printf("bat1EnFull = %s\n", bat1EnFull);
+}
 
 
 int
@@ -314,12 +336,12 @@ parse_args(int argc, char** argv){
 				printf("lock command '%s'\n", &argv[1][0]);
 				strncpy( (char*)&lock_cmd, &argv[1][0], MSG_MAX_LEN);
 				lock_cmd[MSG_MAX_LEN-1]='\0';
-				lock_command_set=1;
-			}
+				lock_command_set=1;}
 			else{
 				fprintf(stderr, "-lock_cmd used without argument\n");
-				exit(EXIT_FAILURE);}
-		}
+				exit(EXIT_FAILURE);}}
+		if( !strncmp( &argv[1][1], debug_detected_devices, MSG_MAX_LEN) ) /* -autoGov */
+			action = DEBUG_DETECTED_DEVICES;
 	}
 		
 	if( action==0 && mode_daemon == 0 ){
@@ -417,11 +439,14 @@ main(int argc, char** argv){
 //		lock_cmd_converted=1, printf("success\n");
 	
 	parse_args(argc, argv);
-	setup_lock_command();
-	connect_to_daemon();
+	switch(action){
+		case DEBUG_DETECTED_DEVICES:
+			break;
+		default:
+			connect_to_daemon();
+	}
 	if( mode_daemon ){
-		//fprintf(stderr, "daemon mode not implemented\n");
-		//exit(EXIT_FAILURE);
+		setup_lock_command();
 		while(1){
 			rc = poll(fds, 1, 1000000);
 			switch(rc){
@@ -481,6 +506,9 @@ main(int argc, char** argv){
 			break;
 		case CLIENT_ASK_FOR_AUTOMATIC_GOVERNOR_CONTROL:
 			basic_send_msg( client_ask_for_automatic_governor_control );
+			break;
+		case DEBUG_DETECTED_DEVICES:
+			dump_detected_power_devices();
 			break;
 		}
 		wait_for_reply();

@@ -1,7 +1,6 @@
-#include <stdlib.h>
-#include <stdio.h>
-#define e_msg_buff_size 128
+#include "error.h"
 char e_msg_buff[e_msg_buff_size]={0};
+//char e_msg_buff[e_msg_buff_size];
 void
 error_errno_msg_exit(const char* msg1, const char* msg2){
 	if(msg2)

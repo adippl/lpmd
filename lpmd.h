@@ -9,6 +9,8 @@ const char* daemon_sock_path="/run/lpmd.socket";
 const char* daemon_adm_sock_path="/run/lpmd_adm.socket";
 #endif
 
+
+
 #define BUF_SIZE 512
 
 #endif // _LPMD_H

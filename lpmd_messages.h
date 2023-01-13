@@ -91,6 +91,8 @@ const char* daemon_action_failure="daemon_action_failure";
 const char* daemon_action_refuse="daemon_action_refuse";
 #define DAEMON_ACTION_REFUSE 205
 
+const char* debug_detected_devices="debug_detected_devices";
+#define DEBUG_DETECTED_DEVICES 10000
 
 
 //const char* client_ask_bat_info="client_ask_bat_info";

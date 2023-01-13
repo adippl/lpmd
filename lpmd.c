@@ -30,6 +30,7 @@
 #include <poll.h>
 
 #include "lpmd.h"
+#include "shared.h"
 #include "error.h"
 #include "lpmd_messages.h"
 
@@ -60,38 +61,6 @@ const int suspendDelay=60;
 const int wallNotify=1;
 const char* wallSuspendWarning="WARNING!!!\nWARNING!!!  battery0 is low.\nWARNING!!!  Syncing filesystem and suspending to mem in 15 seconds...\n";
 const char* wallLowBatWarning="WARNING!!!\nWARNING!!!  battery0 is below 25%\n";
-
-/* /sys fs file paths */
-static const char* power_supply_class="/sys/class/power_supply";
-//const char* bat0Dir="/sys/class/power_supply/BAT0";
-//const char* bat1Dir="/sys/class/power_supply/BAT1";
-//const char* bat0ThrStrt="/sys/class/power_supply/BAT0/charge_start_threshold";
-//const char* bat0ThrStop="/sys/class/power_supply/BAT0/charge_stop_threshold";
-//const char* bat1ThrStrt="/sys/class/power_supply/BAT1/charge_start_threshold";
-//const char* bat1ThrStop="/sys/class/power_supply/BAT1/charge_stop_threshold";
-//#ifndef ENERGY_FULL_DESIGN
-//const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full";
-//const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full";
-//#else
-//const char* bat0EnFull="/sys/class/power_supply/BAT0/energy_full_design";
-//const char* bat1EnFull="/sys/class/power_supply/BAT1/energy_full_design";
-//#endif
-//const char* bat0EnNow="/sys/class/power_supply/BAT0/energy_now";
-//const char* bat1EnNow="/sys/class/power_supply/BAT1/energy_now";
-//const char* chargerConnectedPath="/sys/class/power_supply/AC/online";
-
-#define PATHNAME_MAX_LEN 128
-char bat0Dir[ PATHNAME_MAX_LEN ] = {0};
-char bat1Dir[ PATHNAME_MAX_LEN ] = {0};
-char bat0ThrStrt[ PATHNAME_MAX_LEN ] = {0};
-char bat0ThrStop[ PATHNAME_MAX_LEN ] = {0};
-char bat1ThrStrt[ PATHNAME_MAX_LEN ] = {0};
-char bat1ThrStop[ PATHNAME_MAX_LEN ] = {0};
-char bat0EnNow[ PATHNAME_MAX_LEN ] = {0};
-char bat1EnNow[ PATHNAME_MAX_LEN ] = {0};
-char chargerConnectedPath[ PATHNAME_MAX_LEN ] = {0};
-char bat0EnFull[ PATHNAME_MAX_LEN ] = {0};
-char bat1EnFull[ PATHNAME_MAX_LEN ] = {0};
 
 const char* powerState="/sys/power/state";
 const char* pttyDir="/dev/pts/";
@@ -132,23 +101,6 @@ int numberOfCores=4;
 int acpid_connected=0;
 int lid_state=-1;
 int lid_state_changed=1;
-
-
-
-struct power_class_dev {
-	int		type;
-	char	name[28]; /* should add up to 32 on intel machines */
-};
-#define POWER_CLASS_NAME_MAX_LEN 28
-#define POWER_SUPPLY_DEVS_MAX 8
-struct power_class_dev power_supply_devs[POWER_SUPPLY_DEVS_MAX] = {0};
-int power_supply_devs_size = 0;
-
-#define POWER_SUPPLY_MAINS 0
-#define POWER_SUPPLY_BATTERY 1
-static const char* class_power_supply[] = {
-	"Mains",
-	"Battery", };
 
 
 const int require_session_locks=0;
@@ -357,7 +309,7 @@ void
 detect_intel_pstate(){
 	if(checkDir(intel_pstate_path)){
 		fprintf(stdout,
-			"Detected intel_pstate, enabling turbo boost control\n");
+			"Detected intel_pstate, turbo boost control available\n");
 			intel_pstate_present=1;
 		if( access( intel_pstate_turbo_path, R_OK|W_OK ) ){
 			fprintf(stdout,
@@ -390,185 +342,7 @@ updatePowerPerc(){
 	if(bat1Exists){
 		a=fileToint(bat1EnNow);
 		bat1charge=(float)a/bat1maxCharge;}}
-void
-replace_newline_with_null(char* str, size_t str_size){
-	for(unsigned int i=0; i<str_size; i++){
-		if( str[i]=='\n' )
-			str[i]='\0';
-		if( str[i]=='\0' )
-			return;}}
 
-void
-detect_power_supply_class_devices(){
-	struct dirent *dir = NULL;
-	DIR* pdir = opendir( power_supply_class );
-	char temp_path[256]={0};
-	char type_buffer[ POWER_CLASS_NAME_MAX_LEN ]={0};
-	FILE* typefile = NULL;
-	/* clear power_supply_devs */
-	memset( power_supply_devs, 0, sizeof(power_supply_devs));
-	power_supply_devs_size=0;
-	/* populate power_supply_devs */
-	if( !pdir )
-		error_errno_msg_exit("couldn't open ", power_supply_class );
-	while( (dir = readdir(pdir)) != NULL){
-		if( dir->d_name[0] == '.' )
-			continue;
-		if( POWER_SUPPLY_DEVS_MAX <= power_supply_devs_size ){
-			/* our arrry is full, not adding new devices */
-			/* TODO add error message */
-			fprintf(stderr, "power_supply_devs array is full, not adding more devices\n");
-			continue;}
-		snprintf(
-			temp_path,
-			128,
-			"%s/%.32s/type",
-			power_supply_class,
-			dir->d_name);
-		typefile=NULL;
-		typefile = fopen( temp_path, "rb" );
-		if( !typefile )
-			error_errno_msg_exit("file is not read accessible ", temp_path);
-		fread( type_buffer, 1, POWER_CLASS_NAME_MAX_LEN, typefile);
-		fclose( typefile );
-		type_buffer[ POWER_CLASS_NAME_MAX_LEN-1 ]='\0';
-		replace_newline_with_null( type_buffer, POWER_CLASS_NAME_MAX_LEN);
-#ifdef DEBUG
-		fprintf(stderr,
-			"Detected power_supply class device: \"%s\", type: \"%s\":\n",
-			dir->d_name,
-			type_buffer);
-#endif
-		/* add device to array */
-		if( !strncmp( type_buffer, class_power_supply[ POWER_SUPPLY_MAINS ]  , POWER_CLASS_NAME_MAX_LEN))
-			power_supply_devs[ power_supply_devs_size ].type = POWER_SUPPLY_MAINS;
-		else if( !strncmp( type_buffer, class_power_supply[ POWER_SUPPLY_BATTERY ]  , POWER_CLASS_NAME_MAX_LEN))
-			power_supply_devs[ power_supply_devs_size ].type = POWER_SUPPLY_BATTERY;
-		else{
-			fprintf(stderr, "ERROR, %s/%.28s device type unkonwn: %s\n",
-				power_supply_class,
-				dir->d_name,
-				type_buffer);
-			continue;}
-		strncpy(
-			power_supply_devs[ power_supply_devs_size ].name,
-			dir->d_name,
-			POWER_CLASS_NAME_MAX_LEN );
-		/* just to be sure */
-		power_supply_devs[ power_supply_devs_size ].name[27]='\0';
-		power_supply_devs_size++;
-	}
-	closedir(pdir);
-	}
-
-
-void
-zero_device_path_names(){
-	memset( bat0Dir, 0, PATHNAME_MAX_LEN);
-	memset( bat1Dir, 0, PATHNAME_MAX_LEN);
-	memset( bat0ThrStrt, 0, PATHNAME_MAX_LEN);
-	memset( bat0ThrStop, 0, PATHNAME_MAX_LEN);
-	memset( bat1ThrStrt, 0, PATHNAME_MAX_LEN);
-	memset( bat1ThrStop, 0, PATHNAME_MAX_LEN);
-	memset( bat0EnNow, 0, PATHNAME_MAX_LEN);
-	memset( bat1EnNow, 0, PATHNAME_MAX_LEN);
-	memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
-	memset( bat0EnFull, 0, PATHNAME_MAX_LEN);
-	memset( bat1EnFull, 0, PATHNAME_MAX_LEN);}
-
-void
-populate_sys_paths(){
-	int bat0set=0;
-	int bat1set=0;
-	/* listing array backwards */
-	for(int i=power_supply_devs_size-1; i>=0; i--){
-//#ifdef DEBUG
-//		fprintf(stderr,
-//			"listing power_supply class device: \"%s\", type: \"%s\":\n",
-//			power_supply_devs[i].name,
-//			class_power_supply[ power_supply_devs[i].type ]);
-//#endif
-		/* setup for ac adapter */
-		if( power_supply_devs[i].type == POWER_SUPPLY_MAINS ){
-			snprintf( chargerConnectedPath,
-				PATHNAME_MAX_LEN,
-				"%s/%s/online",
-				power_supply_class,
-				power_supply_devs[i].name);
-			continue;}
-		if( power_supply_devs[i].type == POWER_SUPPLY_BATTERY ){
-			/* setup for bat0 */
-			if( ! bat0set ){
-				snprintf( bat0Dir,
-					PATHNAME_MAX_LEN,
-					"%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name);
-				snprintf( bat0ThrStrt,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s", /* concat 3 strings to avoid gcc printf truncation errors */
-					power_supply_class,
-					power_supply_devs[i].name,
-					"charge_start_threshold");
-				snprintf( bat0ThrStop,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"charge_stop_threshold");
-				snprintf( bat0EnFull,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"energy_full");
-				snprintf( bat0EnNow,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"energy_now");
-				bat0set=1;}
-			/* setup for bat1 */
-			else if( ! bat1set ){
-				snprintf( bat1Dir,
-					PATHNAME_MAX_LEN,
-					"%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name);
-				snprintf( bat1ThrStrt,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s", /* concat 3 strings to avoid gcc printf truncation errors */
-					power_supply_class,
-					power_supply_devs[i].name,
-					"charge_start_threshold");
-				snprintf( bat1ThrStop,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"charge_stop_threshold");
-				snprintf( bat1EnFull,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"energy_full");
-				snprintf( bat1EnNow,
-					PATHNAME_MAX_LEN,
-					"%s/%s/%s",
-					power_supply_class,
-					power_supply_devs[i].name,
-					"energy_now");
-				bat1set=1;}
-			else{
-				fprintf(stderr, "ERROR, lpmd doesn't support 3rd battery");
-				fprintf(stderr,
-					"listing power_supply class device: \"%s\", type: \"%s\":\n",
-					power_supply_devs[i].name,
-					class_power_supply[ power_supply_devs[i].type ]);}
-			continue;}
-		}}
 
 void
 checkSysDirs(){
@@ -942,7 +716,9 @@ _setGovernor(int governor){
 		for(int i=0; i<numberOfCores; i++){
 			sprintf( (char*)&path, 
 				"/sys/devices/system/cpu/cpu%d/cpufreq/scaling_governor", i);
-			strToFile((char*)&path, (char*)gov);}}
+			strToFile((char*)&path, (char*)gov);}
+		/* log governor change */
+		fprintf(stdout, "cpu governor changed to \'%s\'\n", gov);}
 	else
 		fprintf(stderr, 
 			"not switching cpu governor, governor management disabled\n");}
@@ -972,11 +748,11 @@ cpu_boost_control(int gov_id){
 		switch( gov_id ){
 			case CPU_BOOST_OFF:
 				no_boost=1;
-				fprintf(stderr, "disabling cpu boost via intel_pstate\n");
+				fprintf(stdout, "disabling cpu boost via intel_pstate\n");
 				break;
 			case CPU_BOOST_ON:
 				no_boost=0;
-				fprintf(stderr, "enabling cpu boost via intel_pstate\n");
+				fprintf(stdout, "enabling cpu boost via intel_pstate\n");
 				break;
 			default:
 				fprintf(stderr,
@@ -1070,7 +846,7 @@ void
 updateChargerState(){
 /* re-enable chargerConnectedPath style checks on pinebook-pro */
 /* acpid on pinebook-pro doesn't detect charger connects/disconnects */
-/* TODO conditiona switch instead of broad arch wide */
+/* TODO conditional switch instead of broad arch wide */
 #ifndef __aarch64__
 	if(acpid_connected) return; // skip primitive check if acpid is avaliable
 #endif
@@ -1279,7 +1055,9 @@ acpi_handle_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 		//for(int i=0; i<ACPID_EV_MAX; i++){
 		if(!strncmp("ac_adapter", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){
 			i=atoi(acpidEvent[3]);
+#ifdef DEBUG
 			fprintf(stderr, "charger state from acpid %d\n", i);
+#endif
 			if(i != chargerConnected){
 				chargerConnected=i;
 				chargerChangedState();}}
@@ -1360,6 +1138,8 @@ accept_connection(int fd, int adm){
 	if( fds_append( new_fd, POLLIN )){
 		fprintf(stderr, "ERR failed to accept() connetion FDS full\n");
 		return;}
+//	struct ucred ucred;
+//	int len=sizeof(ucred);
 	if( adm )
 		adm_conn_append( new_fd );}
 
@@ -1464,17 +1244,17 @@ reconnect_to_acpid(){
 
 void
 checkForLowPower(){
-	int bat0low=bat0charge<batMinSleepThreshold;
-	int bat1low=bat1charge<batMinSleepThreshold;
-	int bat0lowWarn=bat0charge<batLowWarningThreshold;
-	int bat1lowWarn=bat1charge<batLowWarningThreshold;
+	int bat0low = bat0charge < batMinSleepThreshold;
+	int bat1low = bat1charge < batMinSleepThreshold;
+	int bat0lowWarn = bat0charge < batLowWarningThreshold;
+	int bat1lowWarn = bat1charge < batLowWarningThreshold;
 	if(!chargerConnected){
-		if( (bat0Exists&&bat0low)||(bat1Exists&&bat0low&&bat1low)){
-			
+		if((bat0Exists && bat0low) || (bat1Exists && bat0low && bat1low)){
+		
 			battery_low_suspend();
 			return;}}
-		if(((bat0Exists&&bat0lowWarn)||\
-			(bat1Exists&&bat0lowWarn&&bat1lowWarn))&&\
+		if((( bat0Exists && bat0lowWarn) || \
+			(bat1Exists && bat0lowWarn && bat1lowWarn)) && \
 			!lowBatWarning_warned){
 			
 			wall(wallLowBatWarning);

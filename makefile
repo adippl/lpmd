@@ -1,3 +1,4 @@
+# set destdir from gentoo's emerge
 ifeq ($(DESTDIR),)
  DESTDIR := 
  PREFIX := /usr/local
@@ -18,17 +19,23 @@ endif
 build: lpmd lpmctl
 
 
-error.o: error.c
+#error.o: error.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+#shared.o: shared.c
+#	$(CC) $(CFLAGS) -c $< -o $@
+
+%.o: ./%.c
 	$(CC) $(CFLAGS) -c $< -o $@
-lpmctl: lpmctl.c error.o
-	$(CC) $(CFLAGS) -o $@ $^ 
-lpmd: lpmd.c error.o
-	$(CC) $(CFLAGS) -o $@ $^ 
+lpmctl: lpmctl.c error.o shared.o
+	$(CC) $(CFLAGS) $^ -o $@
+lpmd: lpmd.c error.o shared.o
+	$(CC) $(CFLAGS) $^ -o $@
 
 debug: lpmd.c lpmctl.c error.c
 	$(CC) $(CFLAGS) -DDEBUG -c error.c
-	$(CC) $(CFLAGS) -DDEBUG lpmd.c error.o -o lpmd
-	$(CC) $(CFLAGS) -DDEBUG lpmctl.c error.o -o lpmctl
+	$(CC) $(CFLAGS) -DDEBUG -c shared.c
+	$(CC) $(CFLAGS) -DDEBUG lpmd.c shared.o error.o -o lpmd
+	$(CC) $(CFLAGS) -DDEBUG lpmctl.c shared.o error.o -o lpmctl
 
 clean:
 	rm -f lpmd lpmctl *.socket lpmd-profiler gmon.out *.o
