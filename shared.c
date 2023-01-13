@@ -54,6 +54,7 @@ detect_power_supply_class_devices(){
 	char temp_path[256]={0};
 	char type_buffer[ POWER_CLASS_NAME_MAX_LEN ]={0};
 	FILE* typefile = NULL;
+	size_t fread_ret=0;
 	/* clear power_supply_devs */
 	memset( power_supply_devs, 0, sizeof(power_supply_devs));
 	power_supply_devs_size=0;
@@ -78,7 +79,10 @@ detect_power_supply_class_devices(){
 		typefile = fopen( temp_path, "rb" );
 		if( !typefile )
 			error_errno_msg_exit("file is not read accessible ", temp_path);
-		fread( type_buffer, 1, POWER_CLASS_NAME_MAX_LEN, typefile);
+		fread_ret = fread( type_buffer, 1, POWER_CLASS_NAME_MAX_LEN, typefile);
+		if( fread_ret != POWER_CLASS_NAME_MAX_LEN ){
+			if( !feof( typefile ) && ferror( typefile )){
+				error_errno_msg_exit("error reading file: ", temp_path);}}
 		fclose( typefile );
 		type_buffer[ POWER_CLASS_NAME_MAX_LEN-1 ]='\0';
 		replace_newline_with_null( type_buffer, POWER_CLASS_NAME_MAX_LEN);
