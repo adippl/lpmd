@@ -28,6 +28,9 @@ void zero_device_path_names();
 void detect_power_supply_class_devices();
 void populate_sys_paths();
 void replace_newline_with_null(char* str, size_t str_size);
+int fileToStr(const char* path, char* buffer, int buffsize);
+
+int fileToint(const char* path);
 
 
 struct power_class_dev {
@@ -46,16 +49,20 @@ extern const char* power_supply_class;
 
 
 #define PATHNAME_MAX_LEN 128
+extern char bat0_exists;
+extern char bat1_exists;
 extern char bat0Dir[ PATHNAME_MAX_LEN ];
 extern char bat1Dir[ PATHNAME_MAX_LEN ];
-extern char bat0ThrStrt[ PATHNAME_MAX_LEN ];
-extern char bat0ThrStop[ PATHNAME_MAX_LEN ];
-extern char bat1ThrStrt[ PATHNAME_MAX_LEN ];
-extern char bat1ThrStop[ PATHNAME_MAX_LEN ];
-extern char bat0EnNow[ PATHNAME_MAX_LEN ];
-extern char bat1EnNow[ PATHNAME_MAX_LEN ];
+extern char bat0_charge_start_threshold[ PATHNAME_MAX_LEN ];
+extern char bat0_charge_stop_threshold[ PATHNAME_MAX_LEN ];
+extern char bat1_charge_start_threshold[ PATHNAME_MAX_LEN ];
+extern char bat1_charge_stop_threshold[ PATHNAME_MAX_LEN ];
+extern char bat0_energy_now[ PATHNAME_MAX_LEN ];
+extern char bat1_energy_now[ PATHNAME_MAX_LEN ];
 extern char chargerConnectedPath[ PATHNAME_MAX_LEN ];
-extern char bat0EnFull[ PATHNAME_MAX_LEN ];
-extern char bat1EnFull[ PATHNAME_MAX_LEN ];
+extern char bat0_energy_full[ PATHNAME_MAX_LEN ];
+extern char bat1_energy_full[ PATHNAME_MAX_LEN ];
+extern char bat0_energy_full_design[ PATHNAME_MAX_LEN ];
+extern char bat1_energy_full_design[ PATHNAME_MAX_LEN ];
 
 #endif // _SHARED_H

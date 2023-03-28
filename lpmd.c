@@ -46,13 +46,13 @@ char msg_buff[msg_buff_size]={0};
 
 /* config section */
 /* config variables */
-const int def_batThrStrt=45;
-const int def_batThrStop=75;
+const int def_bat_charge_start_threshold=45;
+const int def_bat_charge_stop_threshold=75;
 
-const int bat0ThrStrtVal=45;
-const int bat0ThrStopVal=75;
-const int bat1ThrStrtVal=45;
-const int bat1ThrStopVal=75;
+const int bat0_charge_start_thresholdVal=45;
+const int bat0_charge_stop_thresholdVal=75;
+const int bat1_charge_start_thresholdVal=45;
+const int bat1_charge_stop_thresholdVal=75;
 const float batMinSleepThreshold=0.15f;
 const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
@@ -259,19 +259,6 @@ checkDir(const char* path){
 		perror(path);
 		return(0);}}
 
-int
-fileToint(const char* path){
-	int i=0;
-	FILE* file=fopen(path, "r");
-	if(file){
-		if(fscanf(file, "%d", &i)==1){
-			fclose(file);
-			return(i);}
-		else{
-			fclose(file);
-			return(-1);}}
-	return(-1);}
-
 void
 intToFile(const char* path, int i){
 	FILE* f=fopen(path, "w");
@@ -351,10 +338,10 @@ void
 updatePowerPerc(){
 	int a=0;
 	if(bat0Exists){
-		a=fileToint(bat0EnNow);
+		a=fileToint(bat0_energy_now);
 		bat0charge=(float)a/bat0maxCharge;}
 	if(bat1Exists){
-		a=fileToint(bat1EnNow);
+		a=fileToint(bat1_energy_now);
 		bat1charge=(float)a/bat1maxCharge;}}
 
 
@@ -366,8 +353,8 @@ checkSysDirs(){
 		if(i){
 			bat0Exists=1;
 			fprintf(stdout, "BAT0 Detected\n");
-			bat0maxCharge=fileToint(bat0EnFull);
-			if(checkFile(bat0ThrStrt) && checkFile(bat0ThrStop)){
+			bat0maxCharge=fileToint(bat0_energy_full);
+			if(checkFile(bat0_charge_start_threshold) && checkFile(bat0_charge_stop_threshold)){
 				bat0HasThresholds=1;}}
 		else{
 			bat0Exists=0;
@@ -379,8 +366,8 @@ checkSysDirs(){
 		if(i){
 			bat1Exists=1;
 			fprintf(stdout, "BAT1 Detected\n");
-			bat1maxCharge=fileToint(bat1EnFull);
-			if(checkFile(bat1ThrStrt) && checkFile(bat1ThrStop)){
+			bat1maxCharge=fileToint(bat1_energy_full);
+			if(checkFile(bat1_charge_start_threshold) && checkFile(bat1_charge_stop_threshold)){
 				bat1HasThresholds=1;}}
 		else{
 			bat1Exists=0;
@@ -809,21 +796,21 @@ void
 setThresholds_default(){
 	fprintf(stderr, "Setting charge thresholds\n");
 	if(bat0HasThresholds){
-		intToFile(bat0ThrStrt, bat0ThrStrtVal);
-		intToFile(bat0ThrStop, bat0ThrStopVal);}
+		intToFile(bat0_charge_start_threshold, bat0_charge_start_thresholdVal);
+		intToFile(bat0_charge_stop_threshold, bat0_charge_stop_thresholdVal);}
 	if(bat1HasThresholds){
-		intToFile(bat1ThrStrt, bat1ThrStrtVal);
-		intToFile(bat1ThrStop, bat1ThrStopVal);}}
+		intToFile(bat1_charge_start_threshold, bat1_charge_start_thresholdVal);
+		intToFile(bat1_charge_stop_threshold, bat1_charge_stop_thresholdVal);}}
 
 void
 setThresholds_zero(){
 	fprintf(stderr, "Setting charge thresholds\n");
 	if(bat0HasThresholds){
-		intToFile(bat0ThrStrt, 0);
-		intToFile(bat0ThrStop, 100);}
+		intToFile(bat0_charge_start_threshold, 0);
+		intToFile(bat0_charge_stop_threshold, 100);}
 	if(bat1HasThresholds){
-		intToFile(bat1ThrStrt, 0);
-		intToFile(bat1ThrStop, 100);}}
+		intToFile(bat1_charge_start_threshold, 0);
+		intToFile(bat1_charge_stop_threshold, 100);}}
 
 void
 chargerChangedState(){

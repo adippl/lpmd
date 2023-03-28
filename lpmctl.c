@@ -146,24 +146,132 @@ setup_lock_command(){
 		return;}}
 
 void
-dump_detected_power_devices(){
-	
+detected_power_devices(){
 	zero_device_path_names();
 	detect_power_supply_class_devices();
 	populate_sys_paths();
-	
+}
+
+void
+dump_detected_power_devices_print(){
 	printf("bat0Dir = %s\n", bat0Dir);
 	printf("bat1Dir = %s\n", bat1Dir);
-	printf("bat0ThrStrt = %s\n", bat0ThrStrt);
-	printf("bat0ThrStop = %s\n", bat0ThrStop);
-	printf("bat1ThrStrt = %s\n", bat1ThrStrt);
-	printf("bat1ThrStop = %s\n", bat1ThrStop);
-	printf("bat0EnNow = %s\n", bat0EnNow);
-	printf("bat1EnNow = %s\n", bat1EnNow);
+	printf("bat0_charge_start_threshold = %s\n", bat0_charge_start_threshold);
+	printf("bat0_charge_stop_threshold = %s\n", bat0_charge_stop_threshold);
+	printf("bat1_charge_start_threshold = %s\n", bat1_charge_start_threshold);
+	printf("bat1_charge_stop_threshold = %s\n", bat1_charge_stop_threshold);
+	printf("bat0_energy_now = %s\n", bat0_energy_now);
+	printf("bat1_energy_now = %s\n", bat1_energy_now);
 	printf("chargerConnectedPath = %s\n", chargerConnectedPath);
-	printf("bat0EnFull = %s\n", bat0EnFull);
-	printf("bat1EnFull = %s\n", bat1EnFull);
+	printf("bat0_energy_full = %s\n", bat0_energy_full);
+	printf("bat1_energy_full = %s\n", bat1_energy_full);
+	printf("bat0_energy_full_design = %s\n", bat0_energy_full_design);
+	printf("bat1_energy_full_design = %s\n", bat1_energy_full_design);
 }
+
+void
+dump_single_battery_info(char* bat){
+	int energy_now = -1;
+	int energy_full = -1;
+	int energy_full_design = -1;
+	char path_buffer[512];
+	char read_buffer[512];
+	printf("\n");
+	printf("battery: %s\n", bat);
+	
+	snprintf( path_buffer, 512, "%s/energy_now", bat );
+	if( ! access(path_buffer, F_OK)){
+		energy_now = fileToint(path_buffer);
+		printf("  energy_now                %7.3f Wh\n",
+			(float) energy_now / 1000000);
+		}
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/energy_full", bat );
+	if( ! access(path_buffer, F_OK)){
+		energy_full = fileToint(path_buffer);
+		printf("  energy_full               %7.3f Wh\n",
+			(float) energy_full / 1000000);
+		}
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/energy_full_design", bat );
+	if( ! access(path_buffer, F_OK)){
+		energy_full_design = fileToint(path_buffer); 
+		printf("  energy_full_design        %7.3f Wh\n",
+			(float) energy_full_design / 1000000);
+		}
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	printf("\n");
+	
+	if( energy_now != -1 && energy_full != -1 )
+		printf("  energy_full_perc          %7.3f %%\n",
+			(float) energy_now / energy_full * 100);
+	if( energy_now != -1 && energy_full_design != -1 )
+		printf("  energy_full_design_perc   %7.3f %%\n",
+			(float) energy_now / energy_full_design * 100);
+	if( energy_full != -1 && energy_full_design != -1 )
+		printf("  full/design delta         %7.3f %%\n",
+			(float) energy_full / energy_full_design * 100);
+	
+	snprintf( path_buffer, 512, "%s/charge_start_threshold", bat );
+	if( ! access(path_buffer, F_OK))
+		printf("  charge_start_threshold    %7d %%\n",
+			fileToint(path_buffer));
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/charge_stop_threshold", bat );
+	if( ! access(path_buffer, F_OK))
+		printf("  charge_stop_threshold     %7d %%\n",
+			fileToint(path_buffer));
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/voltage_now", bat );
+	if( ! access(path_buffer, F_OK))
+		printf("  voltage_now               %7.3f V\n",
+			(float) fileToint(path_buffer) / 1000000);
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/voltage_min_design", bat );
+	if( ! access(path_buffer, F_OK))
+		printf("  voltage_min_design        %7.3f V\n",
+			(float) fileToint(path_buffer) / 1000000);
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/cycle_count", bat );
+	if( ! access(path_buffer, F_OK))
+		printf("  cycle_count               %7d\n",
+			fileToint(path_buffer));
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	
+	snprintf( path_buffer, 512, "%s/status", bat );
+	if( ! access(path_buffer, F_OK)){
+		fileToStr( path_buffer, read_buffer, 512);
+		printf("  status                     %7s\n", read_buffer);
+		}
+	else
+		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	}
+
+void
+dump_battery_info(){
+	zero_device_path_names();
+	detect_power_supply_class_devices();
+	populate_sys_paths();
+	//dump_detected_power_devices_print();
+	if( bat0_exists )
+		dump_single_battery_info( bat0Dir );
+	if( bat1_exists )
+		dump_single_battery_info( bat1Dir );}
 
 
 int
@@ -262,6 +370,8 @@ static const char* help_message =
 "lpmctl - lpmd configuration utility\n"
 "\n"
 "arguments:\n"
+" -bat			show battery stats\n"
+" -b			show battery stats\n"
 " -zzz			ask daemon to suspend computer\n"
 " -suspend		ask daemon to suspend computer\n"
 " -ZZZ			ask daemon to hibernate computer\n"
@@ -340,8 +450,12 @@ parse_args(int argc, char** argv){
 			else{
 				fprintf(stderr, "-lock_cmd used without argument\n");
 				exit(EXIT_FAILURE);}}
-		if( !strncmp( &argv[1][1], debug_detected_devices, MSG_MAX_LEN) ) /* -autoGov */
+		if( !strncmp( &argv[1][1], debug_detected_devices, MSG_MAX_LEN) ) /* -debug_detected_devices */
 			action = DEBUG_DETECTED_DEVICES;
+		if( !strncmp( &argv[1][1], "bat", MSG_MAX_LEN) ) /* -bat */
+			action = BATTERY_INFO;
+		if( !strncmp( &argv[1][1], "b", MSG_MAX_LEN) ) /* -b */
+			action = BATTERY_INFO;
 	}
 		
 	if( action==0 && mode_daemon == 0 ){
@@ -442,6 +556,8 @@ main(int argc, char** argv){
 	switch(action){
 		case DEBUG_DETECTED_DEVICES:
 			break;
+		case BATTERY_INFO:
+			break;
 		default:
 			connect_to_daemon();
 	}
@@ -508,7 +624,13 @@ main(int argc, char** argv){
 			basic_send_msg( client_ask_for_automatic_governor_control );
 			break;
 		case DEBUG_DETECTED_DEVICES:
-			dump_detected_power_devices();
+			detected_power_devices();
+			dump_detected_power_devices_print();
+			return 0;
+			break;
+		case BATTERY_INFO:
+			dump_battery_info();
+			return 0;
 			break;
 		}
 		wait_for_reply();

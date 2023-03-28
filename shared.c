@@ -17,20 +17,25 @@
 #include "shared.h"
 
 
+char bat0_exists = 0;
+char bat1_exists = 0;
 char bat0Dir[ PATHNAME_MAX_LEN ] = {0};
 char bat1Dir[ PATHNAME_MAX_LEN ] = {0};
-char bat0ThrStrt[ PATHNAME_MAX_LEN ] = {0};
-char bat0ThrStop[ PATHNAME_MAX_LEN ] = {0};
-char bat1ThrStrt[ PATHNAME_MAX_LEN ] = {0};
-char bat1ThrStop[ PATHNAME_MAX_LEN ] = {0};
-char bat0EnNow[ PATHNAME_MAX_LEN ] = {0};
-char bat1EnNow[ PATHNAME_MAX_LEN ] = {0};
+char bat0_charge_start_threshold[ PATHNAME_MAX_LEN ] = {0};
+char bat0_charge_stop_threshold[ PATHNAME_MAX_LEN ] = {0};
+char bat1_charge_start_threshold[ PATHNAME_MAX_LEN ] = {0};
+char bat1_charge_stop_threshold[ PATHNAME_MAX_LEN ] = {0};
+char bat0_energy_now[ PATHNAME_MAX_LEN ] = {0};
+char bat1_energy_now[ PATHNAME_MAX_LEN ] = {0};
 char chargerConnectedPath[ PATHNAME_MAX_LEN ] = {0};
-char bat0EnFull[ PATHNAME_MAX_LEN ] = {0};
-char bat1EnFull[ PATHNAME_MAX_LEN ] = {0};
+char bat0_energy_full[ PATHNAME_MAX_LEN ] = {0};
+char bat1_energy_full[ PATHNAME_MAX_LEN ] = {0};
+char bat0_energy_full_design[ PATHNAME_MAX_LEN ] = {0};
+char bat1_energy_full_design[ PATHNAME_MAX_LEN ] = {0};
 
 struct power_class_dev power_supply_devs[POWER_SUPPLY_DEVS_MAX] = {0};
 int power_supply_devs_size = 0;
+
 
 
 const char* power_supply_class="/sys/class/power_supply";
@@ -117,22 +122,22 @@ detect_power_supply_class_devices(){
 
 void
 zero_device_path_names(){
+	bat0_exists = 0;
+	bat1_exists = 0;
 	memset( bat0Dir, 0, PATHNAME_MAX_LEN);
 	memset( bat1Dir, 0, PATHNAME_MAX_LEN);
-	memset( bat0ThrStrt, 0, PATHNAME_MAX_LEN);
-	memset( bat0ThrStop, 0, PATHNAME_MAX_LEN);
-	memset( bat1ThrStrt, 0, PATHNAME_MAX_LEN);
-	memset( bat1ThrStop, 0, PATHNAME_MAX_LEN);
-	memset( bat0EnNow, 0, PATHNAME_MAX_LEN);
-	memset( bat1EnNow, 0, PATHNAME_MAX_LEN);
+	memset( bat0_charge_start_threshold, 0, PATHNAME_MAX_LEN);
+	memset( bat0_charge_stop_threshold, 0, PATHNAME_MAX_LEN);
+	memset( bat1_charge_start_threshold, 0, PATHNAME_MAX_LEN);
+	memset( bat1_charge_stop_threshold, 0, PATHNAME_MAX_LEN);
+	memset( bat0_energy_now, 0, PATHNAME_MAX_LEN);
+	memset( bat1_energy_now, 0, PATHNAME_MAX_LEN);
 	memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
-	memset( bat0EnFull, 0, PATHNAME_MAX_LEN);
-	memset( bat1EnFull, 0, PATHNAME_MAX_LEN);}
+	memset( bat0_energy_full, 0, PATHNAME_MAX_LEN);
+	memset( bat1_energy_full, 0, PATHNAME_MAX_LEN);}
 
 void
 populate_sys_paths(){
-	int bat0set=0;
-	int bat1set=0;
 	/* listing array backwards */
 	for(int i=power_supply_devs_size-1; i>=0; i--){
 //#ifdef DEBUG
@@ -151,69 +156,81 @@ populate_sys_paths(){
 			continue;}
 		if( power_supply_devs[i].type == POWER_SUPPLY_BATTERY ){
 			/* setup for bat0 */
-			if( ! bat0set ){
+			if( ! bat0_exists ){
 				snprintf( bat0Dir,
 					PATHNAME_MAX_LEN,
 					"%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name);
-				snprintf( bat0ThrStrt,
+				snprintf( bat0_charge_start_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s", /* concat 3 strings to avoid gcc printf truncation errors */
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_start_threshold");
-				snprintf( bat0ThrStop,
+				snprintf( bat0_charge_stop_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_stop_threshold");
-				snprintf( bat0EnFull,
+				snprintf( bat0_energy_full,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_full");
-				snprintf( bat0EnNow,
+				snprintf( bat0_energy_full_design,
+					PATHNAME_MAX_LEN,
+					"%s/%s/%s",
+					power_supply_class,
+					power_supply_devs[i].name,
+					"energy_full_design");
+				snprintf( bat0_energy_now,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_now");
-				bat0set=1;}
+				bat0_exists = 1;}
 			/* setup for bat1 */
-			else if( ! bat1set ){
+			else if( ! bat1_exists ){
 				snprintf( bat1Dir,
 					PATHNAME_MAX_LEN,
 					"%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name);
-				snprintf( bat1ThrStrt,
+				snprintf( bat1_charge_start_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s", /* concat 3 strings to avoid gcc printf truncation errors */
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_start_threshold");
-				snprintf( bat1ThrStop,
+				snprintf( bat1_charge_stop_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_stop_threshold");
-				snprintf( bat1EnFull,
+				snprintf( bat1_energy_full,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_full");
-				snprintf( bat1EnNow,
+				snprintf( bat1_energy_full_design,
+					PATHNAME_MAX_LEN,
+					"%s/%s/%s",
+					power_supply_class,
+					power_supply_devs[i].name,
+					"energy_full_design");
+				snprintf( bat1_energy_now,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_now");
-				bat1set=1;}
+				bat1_exists = 1;}
 			else{
 				fprintf(stderr, "ERROR, lpmd doesn't support 3rd battery");
 				fprintf(stderr,
@@ -222,3 +239,34 @@ populate_sys_paths(){
 					class_power_supply[ power_supply_devs[i].type ]);}
 			continue;}
 		}}
+
+int
+fileToint(const char* path){
+	int i=0;
+	FILE* file=fopen(path, "r");
+	if(file){
+		if(fscanf(file, "%d", &i)==1){
+			fclose(file);
+			return(i);}
+		else{
+			fclose(file);
+			return(-1);}}
+	return(-1);}
+
+int
+fileToStr(const char* path, char* buffer, int buffsize){
+	int i=0;
+	FILE* file=fopen(path, "r");
+	if(file){
+		i = fread( buffer, sizeof(char), buffsize, file);
+		if( i==0 || i< buffsize ){
+			if( feof( file )){
+				fclose( file );
+				replace_newline_with_null( buffer, buffsize);
+				return(i);}
+			if( ferror( file )){
+				perror("error opening file");
+				fprintf(stderr, "error opening %s\n", path);
+				fclose( file );
+				return(-1);}}}
+	return(-1);}

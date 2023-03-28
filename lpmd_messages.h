@@ -76,6 +76,11 @@ const char* client_ask_for_performance_gov_lock="client_ask_for_performance_gov_
 const char* client_ask_for_automatic_governor_control="client_ask_for_automatic_governor_control";
 #define CLIENT_ASK_FOR_AUTOMATIC_GOVERNOR_CONTROL 111
 
+const char* battery_info="battery_info";
+#define BATTERY_INFO 112
+const char* power_info="power_info";
+#define POWER_INFO 113
+
 
 const char* cl_new="cl_new";
 #define cl_new 199
