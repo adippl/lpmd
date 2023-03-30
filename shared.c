@@ -138,6 +138,8 @@ zero_device_path_names(){
 
 void
 populate_sys_paths(){
+	char path_buffer[512];
+	char read_buffer[512];
 	/* listing array backwards */
 	for(int i=power_supply_devs_size-1; i>=0; i--){
 //#ifdef DEBUG
@@ -162,36 +164,64 @@ populate_sys_paths(){
 					"%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name);
+
+//				snprintf( path_buffer, 512, "%s/charge_start_threshold", bat0Dir );
+//				if( ! access(path_buffer, F_OK)){
+//					energy_full_design = fileToint(path_buffer); 
+//					}
+//				else
+//					fprintf(stderr, "err %s doesn't exists\n", path_buffer);
+
 				snprintf( bat0_charge_start_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s", /* concat 3 strings to avoid gcc printf truncation errors */
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_start_threshold");
+				/* zero this path if it's invalid */
+				if( access( bat0_charge_start_threshold, F_OK))
+					bat0_charge_start_threshold[0]='\0'; 
+				
 				snprintf( bat0_charge_stop_threshold,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"charge_stop_threshold");
+				/* zero generated path if it's invalid */
+				if( access( bat0_charge_stop_threshold, F_OK))
+					bat0_charge_stop_threshold[0]='\0'; 
+				
 				snprintf( bat0_energy_full,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_full");
+				/* zero generated path if it's invalid */
+				if( access( bat0_energy_full, F_OK))
+					bat0_energy_full[0]='\0'; 
+				
 				snprintf( bat0_energy_full_design,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_full_design");
+				/* zero generated path if it's invalid */
+				if( access( bat0_energy_full_design, F_OK))
+					bat0_energy_full_design[0]='\0'; 
+				
 				snprintf( bat0_energy_now,
 					PATHNAME_MAX_LEN,
 					"%s/%s/%s",
 					power_supply_class,
 					power_supply_devs[i].name,
 					"energy_now");
+				/* zero generated path if it's invalid */
+				if( access( bat0_energy_now, F_OK))
+					bat0_energy_now[0]='\0'; 
+				
 				bat0_exists = 1;}
 			/* setup for bat1 */
 			else if( ! bat1_exists ){
