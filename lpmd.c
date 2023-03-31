@@ -259,37 +259,6 @@ checkDir(const char* path){
 		perror(path);
 		return(0);}}
 
-void
-intToFile(const char* path, int i){
-	FILE* f=fopen(path, "w");
-	if(f){
-		fprintf(f, "%d", i);
-		fclose(f);}
-	else{
-		perror(path);}}
-
-__attribute__ ((warn_unused_result)) int
-intToFile_check(const char* path, int i){
-	int rc=0;
-	FILE* f=fopen(path, "w");
-	if(f){
-		rc=fprintf(f, "%d", i);
-		fclose(f);
-		if( rc!=1 )
-			return(1);
-		return(0);}
-	else{
-		perror(path);
-		return(1);}}
-
-void
-strToFile(const char* path, char* str){
-	FILE* f=fopen(path, "w");
-	if(f){
-		fputs(str, f);
-		fclose(f);}
-	else{
-		perror(path);}}
 
 void
 detectNumberOfCpus(){

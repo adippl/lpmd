@@ -154,219 +154,90 @@ detected_power_devices(){
 
 void
 dump_detected_power_devices_print(){
-	printf("bat0Dir = %s\n", bat0Dir);
-	printf("bat1Dir = %s\n", bat1Dir);
-	printf("bat0_charge_start_threshold = %s\n", bat0_charge_start_threshold);
-	printf("bat0_charge_stop_threshold = %s\n", bat0_charge_stop_threshold);
-	printf("bat1_charge_start_threshold = %s\n", bat1_charge_start_threshold);
-	printf("bat1_charge_stop_threshold = %s\n", bat1_charge_stop_threshold);
-	printf("bat0_energy_now = %s\n", bat0_energy_now);
-	printf("bat1_energy_now = %s\n", bat1_energy_now);
 	printf("chargerConnectedPath = %s\n", chargerConnectedPath);
-	printf("bat0_energy_full = %s\n", bat0_energy_full);
-	printf("bat1_energy_full = %s\n", bat1_energy_full);
-	printf("bat0_energy_full_design = %s\n", bat0_energy_full_design);
-	printf("bat1_energy_full_design = %s\n", bat1_energy_full_design);
+	for(int i=0; i < BAT_MAX; i++){
+		printf("bat%d.exists = %d\n", i, bat[i].exists);
+		printf("bat%d.dir = %s\n", i, bat[i].dir);
+		printf("bat%d.charge_start_threshold = %s\n", i, bat[i].charge_start_threshold);
+		printf("bat%d.charge_stop_threshold = %s\n", i, bat[i].charge_stop_threshold);
+		printf("bat%d.energy_now = %s\n", i, bat[i].energy_now);
+		printf("bat%d.energy_full = %s\n", i, bat[i].energy_full);
+		printf("bat%d.energy_full_design = %s\n", i, bat[i].energy_full_design);
+		printf("bat%d.charge_now = %s\n", i, bat[i].charge_now);
+		printf("bat%d.charge_full = %s\n", i, bat[i].charge_full);
+		printf("bat%d.charge_instead_of_energy = %d\n", i, bat[i].charge_instead_of_energy);
+	}
 }
 
 
 void
-dump_single_battery_info(char* bat){
-	int energy_now = -1;
-	int energy_full = -1;
-	int energy_full_design = -1;
-	char path_buffer[512];
+dump_single_battery_info(int i){
 	char read_buffer[512];
-	printf("\n");
-	printf("battery: %s\n", bat);
-	
-	snprintf( path_buffer, 512, "%s/energy_now", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_now = fileToint(path_buffer);
-		printf("  energy_now                %7.3f Wh\n",
-			(float) energy_now / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/energy_full", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_full = fileToint(path_buffer);
-		printf("  energy_full               %7.3f Wh\n",
-			(float) energy_full / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/energy_full_design", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_full_design = fileToint(path_buffer); 
-		printf("  energy_full_design        %7.3f Wh\n",
-			(float) energy_full_design / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	printf("\n");
-	
-	if( energy_now != -1 && energy_full != -1 )
-		printf("  energy_full_perc          %7.3f %%\n",
-			(float) energy_now / energy_full * 100);
-	if( energy_now != -1 && energy_full_design != -1 )
-		printf("  energy_full_design_perc   %7.3f %%\n",
-			(float) energy_now / energy_full_design * 100);
-	if( energy_full != -1 && energy_full_design != -1 )
-		printf("  full/design delta         %7.3f %%\n",
-			(float) energy_full / energy_full_design * 100);
-	
-	snprintf( path_buffer, 512, "%s/charge_start_threshold", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  charge_start_threshold    %7d %%\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/charge_stop_threshold", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  charge_stop_threshold     %7d %%\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/voltage_now", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  voltage_now               %7.3f V\n",
-			(float) fileToint(path_buffer) / 1000000);
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/voltage_min_design", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  voltage_min_design        %7.3f V\n",
-			(float) fileToint(path_buffer) / 1000000);
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/cycle_count", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  cycle_count               %7d\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/status", bat );
-	if( ! access(path_buffer, F_OK)){
-		fileToStr( path_buffer, read_buffer, 512);
-		printf("  status                     %7s\n", read_buffer);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
+	printf("battery: %s\n", bat[i].dir);
+	if( ! bat[i].charge_instead_of_energy ){
+		if( bat[i].energy_now[0] && bat[i].energy_full[i] )
+			printf("  energy_full_perc          %7.3f %%\n",
+				(float)  fileToint( bat[i].energy_now ) / fileToint( bat[i].energy_full ) * 100);
+		if( bat[i].energy_now[0] && bat[i].energy_full_design[i] )
+			printf("  energy_full_design_perc   %7.3f %%\n",
+				(float)  fileToint( bat[i].energy_now ) / fileToint( bat[i].energy_full_design ) * 100);
+		if( bat[i].energy_now[0] )
+			printf("  energy_now                %7.3f Wh\n",
+				(float) fileToint( bat[i].energy_now ) / 1000000 );
+		if( bat[i].energy_full[0] )
+			printf("  energy_full               %7.3f Wh\n",
+				(float) fileToint( bat[i].energy_full ) / 1000000 );
+		if( bat[i].energy_full_design[0] )
+			printf("  energy_full_design        %7.3f Wh\n",
+				(float) fileToint( bat[i].energy_full_design ) / 1000000 );
+	}else{
+		if( bat[i].charge_now[0] && bat[i].charge_full[i] )
+			printf("  charge_full_perc          %7.3f %%\n",
+				(float)  fileToint( bat[i].charge_now ) / fileToint( bat[i].charge_full ) * 100);
+		if( bat[i].charge_now[0] )
+			printf("  charge_now                %7.3f Ah\n",
+				(float) fileToint( bat[i].charge_now ) / 1000000 );
+		if( bat[i].charge_full[0] )
+			printf("  charge_full               %7.3f Ah\n",
+				(float) fileToint( bat[i].charge_full ) / 1000000 );
+		if( bat[i].voltage_now[0] && bat[i].charge_now[0] ){
+			printf("  energy_now  (estimated)   %7.3f Wh\n",
+				(float) fileToint( bat[i].charge_now ) / 1000000 * fileToint( bat[i].voltage_now ) /1000000 );}
+		if( bat[i].voltage_now[0] && bat[i].charge_full[0] ){
+			printf("  charge_full (extimated)   %7.3f Wh\n",
+				(float) fileToint( bat[i].charge_full ) / 1000000 * fileToint( bat[i].voltage_now ) /1000000 );}
 	}
+	if( bat[i].voltage_now[0] )
+		printf("  voltage_now               %7.3f V\n",
+			(float) fileToint( bat[i].voltage_now ) / 1000000 );
+	if( bat[i].voltage_min_design[0] )
+		printf("  voltage_min_design        %7.3f V\n",
+			(float) fileToint( bat[i].voltage_min_design ) / 1000000 );
+	if( bat[i].cycle_count[0] )
+		printf("  cycle_count               %7d\n",
+			fileToint( bat[i].cycle_count ) );
+	if( bat[i].status[0] ){
+		fileToStr( bat[i].status, read_buffer, 512);
+		printf("  status                     %10s\n", read_buffer);}
+	if( bat[i].charge_start_threshold[0] )
+		printf("  charge_start_threshold    %7d\n",
+			fileToint( bat[i].charge_start_threshold ) );
+	if( bat[i].charge_stop_threshold[0] )
+		printf("  charge_stop_threshold     %7d\n",
+			fileToint( bat[i].charge_stop_threshold ) );
+		
+}
 
-void
-_old_dump_single_battery_info(char* bat){
-	int energy_now = -1;
-	int energy_full = -1;
-	int energy_full_design = -1;
-	char path_buffer[512];
-	char read_buffer[512];
-	printf("\n");
-	printf("battery: %s\n", bat);
-	
-	snprintf( path_buffer, 512, "%s/energy_now", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_now = fileToint(path_buffer);
-		printf("  energy_now                %7.3f Wh\n",
-			(float) energy_now / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/energy_full", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_full = fileToint(path_buffer);
-		printf("  energy_full               %7.3f Wh\n",
-			(float) energy_full / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/energy_full_design", bat );
-	if( ! access(path_buffer, F_OK)){
-		energy_full_design = fileToint(path_buffer); 
-		printf("  energy_full_design        %7.3f Wh\n",
-			(float) energy_full_design / 1000000);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	printf("\n");
-	
-	if( energy_now != -1 && energy_full != -1 )
-		printf("  energy_full_perc          %7.3f %%\n",
-			(float) energy_now / energy_full * 100);
-	if( energy_now != -1 && energy_full_design != -1 )
-		printf("  energy_full_design_perc   %7.3f %%\n",
-			(float) energy_now / energy_full_design * 100);
-	if( energy_full != -1 && energy_full_design != -1 )
-		printf("  full/design delta         %7.3f %%\n",
-			(float) energy_full / energy_full_design * 100);
-	
-	snprintf( path_buffer, 512, "%s/charge_start_threshold", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  charge_start_threshold    %7d %%\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/charge_stop_threshold", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  charge_stop_threshold     %7d %%\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/voltage_now", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  voltage_now               %7.3f V\n",
-			(float) fileToint(path_buffer) / 1000000);
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/voltage_min_design", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  voltage_min_design        %7.3f V\n",
-			(float) fileToint(path_buffer) / 1000000);
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/cycle_count", bat );
-	if( ! access(path_buffer, F_OK))
-		printf("  cycle_count               %7d\n",
-			fileToint(path_buffer));
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	
-	snprintf( path_buffer, 512, "%s/status", bat );
-	if( ! access(path_buffer, F_OK)){
-		fileToStr( path_buffer, read_buffer, 512);
-		printf("  status                     %7s\n", read_buffer);
-		}
-	else
-		fprintf(stderr, "err couldn't access %s\n", path_buffer);
-	}
 
 void
 dump_battery_info(){
 	zero_device_path_names();
 	detect_power_supply_class_devices();
 	populate_sys_paths();
-	dump_detected_power_devices_print();
-	if( bat0_exists )
-		dump_single_battery_info( bat0Dir );
-	if( bat1_exists )
-		dump_single_battery_info( bat1Dir );}
-
+	//dump_detected_power_devices_print();
+	for(int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists )
+			dump_single_battery_info( i );}}
 
 int
 map_str_to_str_arr(
