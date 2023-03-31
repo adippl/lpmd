@@ -54,6 +54,7 @@ extern const char* power_supply_class;
 struct battery{
 	char exists;
 	char charge_instead_of_energy;
+	char has_thresholds;
 	char dir[ PATHNAME_MAX_LEN ];
 	char charge_start_threshold[ PATHNAME_MAX_LEN ];
 	char charge_stop_threshold[ PATHNAME_MAX_LEN ];
@@ -67,12 +68,20 @@ struct battery{
 	char voltage_min_design[ PATHNAME_MAX_LEN ];
 	char cycle_count[ PATHNAME_MAX_LEN ];
 	char status[ PATHNAME_MAX_LEN ];
+	
+	char config_charge_start_threshold;
+	char config_charge_stop_threshold;
+	char low;
+	char low_warn;
+	int  cache_bat_capacity;
+	float  cache_bat_perc;
 };
 
 extern struct battery bat[ BAT_MAX ];
 
 extern char chargerConnectedPath[ PATHNAME_MAX_LEN ];
 
+float get_battery_power(int i);
 
 
 void intToFile(const char* path, int i);

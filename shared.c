@@ -109,28 +109,29 @@ detect_power_supply_class_devices(){
 
 void
 zero_device_path_names(){
-	//memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
-	chargerConnectedPath[0] = '\0';
-	for(int i=0; i >= BAT_MAX; i++){
-		bat[i].exists = 0;
-		bat[i].charge_instead_of_energy = 0;
-		//memset( bat[i].dir, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].charge_start_threshold, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].charge_stop_threshold, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].energy_now, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].energy_full, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].energy_full_design, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].charge_now, 0, PATHNAME_MAX_LEN);
-		//memset( bat[i].charge_full, 0, PATHNAME_MAX_LEN);
-		bat[i].dir[0] = '\0';
-		bat[i].charge_start_threshold[0] = '\0';
-		bat[i].charge_stop_threshold[0] = '\0';
-		bat[i].energy_now[0] = '\0';
-		bat[i].energy_full[0] = '\0';
-		bat[i].energy_full_design[0] = '\0';
-		bat[i].charge_now[0] = '\0';
-		bat[i].charge_full[0] = '\0';
-	}
+	memset( bat, 0, sizeof( struct battery ));
+//	//memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
+//	chargerConnectedPath[0] = '\0';
+//	for(int i=0; i >= BAT_MAX; i++){
+//		bat[i].exists = 0;
+//		bat[i].charge_instead_of_energy = 0;
+//		//memset( bat[i].dir, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].charge_start_threshold, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].charge_stop_threshold, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].energy_now, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].energy_full, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].energy_full_design, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].charge_now, 0, PATHNAME_MAX_LEN);
+//		//memset( bat[i].charge_full, 0, PATHNAME_MAX_LEN);
+//		bat[i].dir[0] = '\0';
+//		bat[i].charge_start_threshold[0] = '\0';
+//		bat[i].charge_stop_threshold[0] = '\0';
+//		bat[i].energy_now[0] = '\0';
+//		bat[i].energy_full[0] = '\0';
+//		bat[i].energy_full_design[0] = '\0';
+//		bat[i].charge_now[0] = '\0';
+//		bat[i].charge_full[0] = '\0';
+//	}
 }
 
 
@@ -274,16 +275,26 @@ populate_sys_paths(){
 						bat[j].status[0]='\0'; 
 					
 					
-					if( bat[j].energy_now[0]=='\0' &&
-						bat[j].energy_full[0]=='\0' &&
-						bat[j].charge_now[0]!='\0' && 
-						bat[j].charge_full[0]!='\0' )
+					if( bat[j].energy_now[0] == '\0' &&
+						bat[j].energy_full[0] == '\0' &&
+						bat[j].charge_now[0] != '\0' && 
+						bat[j].charge_full[0] != '\0' )
 						bat[j].charge_instead_of_energy=1;
+					
+					if( bat[j].charge_start_threshold[0] != '\0' &&
+						bat[j].charge_stop_threshold[0] != '\0' ){
+							bat[j].has_thresholds = 1;
+							bat[j].config_charge_start_threshold = 45;
+							bat[j].config_charge_stop_threshold = 75;}
+					
+					if( bat[j].charge_instead_of_energy ){
+						bat[j].cache_bat_capacity = fileToint( bat[j].charge_full );}
+					else{
+						bat[j].cache_bat_capacity = fileToint( bat[j].energy_full );}
 					
 					bat[j].exists = 1;
 					/* exit out of for loop */
-					goto after_for_loop;}
-			}
+					goto after_for_loop;}}
 			after_for_loop:
 			//else{
 			//	fprintf(stderr, "ERROR, lpmd doesn't support 3rd battery");
@@ -293,6 +304,13 @@ populate_sys_paths(){
 			//		class_power_supply[ power_supply_devs[i].type ]);}
 			continue;}
 		}}
+
+float
+get_battery_power(int i){
+	if( bat[i].charge_instead_of_energy ){
+		return (float) fileToint( bat[i].charge_now ) / bat[i].cache_bat_capacity;}
+	else{
+		return (float) fileToint( bat[i].energy_now ) / bat[i].cache_bat_capacity;}}
 
 int
 fileToint(const char* path){

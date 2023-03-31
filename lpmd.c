@@ -49,10 +49,6 @@ char msg_buff[msg_buff_size]={0};
 const int def_bat_charge_start_threshold=45;
 const int def_bat_charge_stop_threshold=75;
 
-const int bat0_charge_start_thresholdVal=45;
-const int bat0_charge_stop_thresholdVal=75;
-const int bat1_charge_start_thresholdVal=45;
-const int bat1_charge_stop_thresholdVal=75;
 const float batMinSleepThreshold=0.15f;
 const float batLowWarningThreshold=0.25f;
 const int loopInterval=1;
@@ -89,14 +85,6 @@ int current_cpu_boost=0;
 int intel_pstate_present=0;
 char acpi_lid_path_exist=0;
 int powerStateExists=1;
-int bat0Exists=-1;
-int bat1Exists=-1;
-int bat0HasThresholds=0;
-int bat1HasThresholds=0;
-int bat0maxCharge=0;
-int bat1maxCharge=0;
-float bat0charge=0.0;
-float bat1charge=0.0;
 int chargerConnected=-1;
 int lowBatWarning_warned=0;
 int numberOfCores=4;
@@ -305,44 +293,24 @@ fdToint(int fd){ //test function
 
 void
 updatePowerPerc(){
-	int a=0;
-	if(bat0Exists){
-		a=fileToint(bat0_energy_now);
-		bat0charge=(float)a/bat0maxCharge;}
-	if(bat1Exists){
-		a=fileToint(bat1_energy_now);
-		bat1charge=(float)a/bat1maxCharge;}}
+	for(int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists ){
+			bat[i].cache_bat_perc = get_battery_power(i);}}}
 
 
 void
 checkSysDirs(){
 	int rescan_class_power=0;
-	int i=checkDir(bat0Dir);
-	if(i!=bat0Exists){
-		if(i){
-			bat0Exists=1;
-			fprintf(stdout, "BAT0 Detected\n");
-			bat0maxCharge=fileToint(bat0_energy_full);
-			if(checkFile(bat0_charge_start_threshold) && checkFile(bat0_charge_stop_threshold)){
-				bat0HasThresholds=1;}}
-		else{
-			bat0Exists=0;
-			bat0HasThresholds=0;
-			rescan_class_power=1;
-			fprintf(stdout, "BAT0 Missing\n");}}
-	i=checkDir(bat1Dir);
-	if(i!=bat1Exists){
-		if(i){
-			bat1Exists=1;
-			fprintf(stdout, "BAT1 Detected\n");
-			bat1maxCharge=fileToint(bat1_energy_full);
-			if(checkFile(bat1_charge_start_threshold) && checkFile(bat1_charge_stop_threshold)){
-				bat1HasThresholds=1;}}
-		else{
-			bat1Exists=0;
-			bat1HasThresholds=0;
-			rescan_class_power=1;
-			fprintf(stdout, "BAT1 Missing\n");}}
+	int d=checkDir(bat[0].dir);
+	for(int i=0; i < BAT_MAX; i++){
+		if( d != bat[i].exists ){
+			if(d){
+				fprintf(stdout, "BAT%d Detected\n", i);
+				}
+			else{
+				bat[i].exists=0;
+				rescan_class_power=1;
+				fprintf(stdout, "BAT%d Missing\n", i);}}}
 	/* bakcup, use only when working without acpid */
 	if( ! acpid_connected && rescan_class_power){
 		fprintf(stdout, "battery disconnected, rescanning power devices\n");
@@ -764,22 +732,18 @@ wall(const char* message){
 void
 setThresholds_default(){
 	fprintf(stderr, "Setting charge thresholds\n");
-	if(bat0HasThresholds){
-		intToFile(bat0_charge_start_threshold, bat0_charge_start_thresholdVal);
-		intToFile(bat0_charge_stop_threshold, bat0_charge_stop_thresholdVal);}
-	if(bat1HasThresholds){
-		intToFile(bat1_charge_start_threshold, bat1_charge_start_thresholdVal);
-		intToFile(bat1_charge_stop_threshold, bat1_charge_stop_thresholdVal);}}
+	for( int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists && bat[i].has_thresholds ){
+			intToFile(bat[i].charge_start_threshold, bat[i].config_charge_start_threshold);
+			intToFile(bat[i].charge_stop_threshold,  bat[i].config_charge_stop_threshold);}}}
 
 void
 setThresholds_zero(){
 	fprintf(stderr, "Setting charge thresholds\n");
-	if(bat0HasThresholds){
-		intToFile(bat0_charge_start_threshold, 0);
-		intToFile(bat0_charge_stop_threshold, 100);}
-	if(bat1HasThresholds){
-		intToFile(bat1_charge_start_threshold, 0);
-		intToFile(bat1_charge_stop_threshold, 100);}}
+	for( int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists && bat[i].has_thresholds ){
+			intToFile(bat[i].charge_start_threshold, 0);
+			intToFile(bat[i].charge_stop_threshold, 100);}}}
 
 void
 chargerChangedState(){
@@ -830,7 +794,7 @@ updateChargerState(){
 
 void
 battery_low_suspend(){
-		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)bat0charge, suspendDelay);
+		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)get_battery_power(0), suspendDelay);
 		sleep( suspendDelay);
 		wall(wallSuspendWarning);
 		suspend();}
@@ -1211,24 +1175,28 @@ reconnect_to_acpid(){
 	if(!acpid_connected && !access(acpid_sock_path, R_OK)){
 		connect_to_acpid();}}
 
-
 void
 checkForLowPower(){
-	int bat0low = bat0charge < batMinSleepThreshold;
-	int bat1low = bat1charge < batMinSleepThreshold;
-	int bat0lowWarn = bat0charge < batLowWarningThreshold;
-	int bat1lowWarn = bat1charge < batLowWarningThreshold;
-	if(!chargerConnected){
-		if((bat0Exists && bat0low) || (bat1Exists && bat0low && bat1low)){
-		
+	char batteries=0;
+	char low=0;
+	char low_warn=0;
+	for( int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists ){
+			bat[i].low = bat[i].cache_bat_perc < batMinSleepThreshold;
+			bat[i].low_warn = bat[i].cache_bat_perc < batLowWarningThreshold;
+			batteries++;
+			low += bat[i].low;
+			low_warn += bat[i].low_warn;}}
+	if( ! chargerConnected ){
+		if( low == batteries ){
 			battery_low_suspend();
-			return;}}
-		if((( bat0Exists && bat0lowWarn) || \
-			(bat1Exists && bat0lowWarn && bat1lowWarn)) && \
-			!lowBatWarning_warned){
+			return;}
+		if( low_warn == batteries && ! lowBatWarning_warned ){
+			wall( wallLowBatWarning);
+			lowBatWarning_warned = 1;}}}
 			
-			wall(wallLowBatWarning);
-			lowBatWarning_warned=1;}}
+
+
 
 int
 main(){
@@ -1268,10 +1236,10 @@ main(){
 			//puts("DEBUG main loop end\n");
 #ifdef DEBUG
 			print_time_no_newline();
-			if(bat1Exists)
-				fprintf(stderr, "bat0 %f bat1 %f",bat0charge,bat1charge);
+			if(bat[1].exists)
+				fprintf(stderr, "bat0 %f bat1 %f", get_battery_power(0), bat[1].cache_bat_perc);
 			else
-				fprintf(stderr, "bat0 %f",bat0charge);
+				fprintf(stderr, "bat0 %f",bat[0].cache_bat_perc);
 			fprintf(stderr, "\n");
 #endif
 			if(!acpid_connected)
