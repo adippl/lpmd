@@ -176,7 +176,7 @@ dump_single_battery_info(int i){
 	printf("battery: %s\n", bat[i].dir);
 	if( ! bat[i].charge_instead_of_energy ){
 		if( bat[i].energy_now[0] && bat[i].energy_full[i] )
-			printf("  energy_full_perc          %7.3f %%\n",
+			printf("  energy_perc               %7.3f %%\n",
 				(float)  fileToint( bat[i].energy_now ) / fileToint( bat[i].energy_full ) * 100);
 		if( bat[i].energy_now[0] && bat[i].energy_full_design[i] )
 			printf("  energy_full_design_perc   %7.3f %%\n",

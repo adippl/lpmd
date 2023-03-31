@@ -301,11 +301,15 @@ updatePowerPerc(){
 void
 checkSysDirs(){
 	int rescan_class_power=0;
-	int d=checkDir(bat[0].dir);
+	int d=0;
 	for(int i=0; i < BAT_MAX; i++){
+		if( bat[i].dir[0] != '\0' )
+			d=checkDir(bat[i].dir);
+		else
+			continue;
 		if( d != bat[i].exists ){
 			if(d){
-				fprintf(stdout, "BAT%d Detected\n", i);
+				fprintf(stdout, "BAT%d Detected at %s\n", i, bat[i].dir);
 				}
 			else{
 				bat[i].exists=0;
