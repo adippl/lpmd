@@ -181,6 +181,9 @@ dump_single_battery_info(int i){
 		if( bat[i].energy_now[0] && bat[i].energy_full_design[i] )
 			printf("  energy_full_design_perc   %7.3f %%\n",
 				(float)  fileToint( bat[i].energy_now ) / fileToint( bat[i].energy_full_design ) * 100);
+		if( bat[i].energy_full[i] && bat[i].energy_full_design[i] )
+			printf("  effective_capacity        %7.3f %%\n",
+				(float)  fileToint( bat[i].energy_full ) / fileToint( bat[i].energy_full_design ) * 100);
 		if( bat[i].energy_now[0] )
 			printf("  energy_now                %7.3f Wh\n",
 				(float) fileToint( bat[i].energy_now ) / 1000000 );
