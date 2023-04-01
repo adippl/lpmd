@@ -734,7 +734,7 @@ wall(const char* message){
 
 void
 setThresholds_default(){
-	fprintf(stderr, "Setting charge thresholds\n");
+	fprintf(stdout, "Setting charge thresholds\n");
 	for( int i=0; i < BAT_MAX; i++){
 		if( bat[i].exists && bat[i].has_thresholds ){
 			intToFile(bat[i].charge_start_threshold, bat[i].config_charge_start_threshold);
@@ -742,7 +742,7 @@ setThresholds_default(){
 
 void
 setThresholds_zero(){
-	fprintf(stderr, "Setting charge thresholds\n");
+	fprintf(stdout, "Setting charge thresholds\n");
 	for( int i=0; i < BAT_MAX; i++){
 		if( bat[i].exists && bat[i].has_thresholds ){
 			intToFile(bat[i].charge_start_threshold, 0);
