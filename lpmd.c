@@ -1257,5 +1257,7 @@ main(){
 #endif
 			if(!acpid_connected)
 				sleep(loopInterval);
+			fflush(stdout);
+			fflush(stderr);
 			}
 	return(0);}
