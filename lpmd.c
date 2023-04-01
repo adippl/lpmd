@@ -1257,6 +1257,8 @@ main(){
 #endif
 			if(!acpid_connected)
 				sleep(loopInterval);
+			/* these ↓ flush buffers to avoid delays 
+			 * while sending messages to logger in openrc */
 			fflush(stdout);
 			fflush(stderr);
 			}
