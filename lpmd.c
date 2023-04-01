@@ -782,16 +782,18 @@ print_time_no_newline(){
 
 void
 updateChargerState(){
-/* re-enable chargerConnectedPath style checks on pinebook-pro */
-/* acpid on pinebook-pro doesn't detect charger connects/disconnects */
-/* TODO conditional switch instead of broad arch wide */
-#ifndef __aarch64__
-	if(acpid_connected) return; // skip primitive check if acpid is avaliable
-#endif
+	/* always check if charger is connected */
+	/* lpmd may miss acpid event if charger was connected while system was suspended */
+	/* TODO detect if system comes out of suspend state??? */
 #ifdef DEBUG
 	fprintf(stderr, "updateChargerState\n");
 #endif
-	int c=fileToint(chargerConnectedPath);
+	int c;
+	if(chargerConnectedPath[0])
+		c=fileToint(chargerConnectedPath);
+	else{
+		c = true;
+		chargerConnected = true;}
 	if(c != chargerConnected){
 		chargerConnected=c;
 		chargerChangedState();}}
@@ -1184,14 +1186,14 @@ checkForLowPower(){
 	char batteries=0;
 	char low=0;
 	char low_warn=0;
-	for( int i=0; i < BAT_MAX; i++){
-		if( bat[i].exists ){
-			bat[i].low = bat[i].cache_bat_perc < batMinSleepThreshold;
-			bat[i].low_warn = bat[i].cache_bat_perc < batLowWarningThreshold;
-			batteries++;
-			low += bat[i].low;
-			low_warn += bat[i].low_warn;}}
-	if( ! chargerConnected ){
+	if( ! chargerConnected  ){
+		for( int i=0; i < BAT_MAX; i++){
+			if( bat[i].exists ){
+				bat[i].low = bat[i].cache_bat_perc < batMinSleepThreshold;
+				bat[i].low_warn = bat[i].cache_bat_perc < batLowWarningThreshold;
+				batteries++;
+				low += bat[i].low;
+				low_warn += bat[i].low_warn;}}
 		if( low == batteries ){
 			battery_low_suspend();
 			return;}

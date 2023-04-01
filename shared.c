@@ -110,7 +110,7 @@ detect_power_supply_class_devices(){
 void
 zero_device_path_names(){
 	memset( bat, 0, sizeof( struct battery ));
-//	//memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
+	memset( chargerConnectedPath, 0, PATHNAME_MAX_LEN);
 //	chargerConnectedPath[0] = '\0';
 //	for(int i=0; i >= BAT_MAX; i++){
 //		bat[i].exists = 0;
