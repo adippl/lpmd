@@ -258,7 +258,7 @@ detectNumberOfCpus(){
 		if(ec!=2)
 			fprintf(stderr, "cpu detect had problem parsing\n");
 		numberOfCores++;
-		fprintf(stderr, "Found %d core cpu\n", numberOfCores);
+		fprintf(stdout, "Found %d core cpu\n", numberOfCores);
 		fclose(f);}
 	else
 		perror(cpupresetPath);}
@@ -431,7 +431,7 @@ daemon_sock_create(){
 	fds[D_SOCK].fd=daemon_sock;
 	fds[D_SOCK].events=POLLIN;
 	nfds++;
-	fprintf(stderr, "Created listening socket %s\n", daemon_sock_path);
+	fprintf(stdout, "Created listening socket %s\n", daemon_sock_path);
 	}
 
 void
@@ -498,7 +498,7 @@ daemon_adm_sock_create(){
 	fds[D_ADM_SOCK].fd=daemon_adm_sock;
 	fds[D_ADM_SOCK].events=POLLIN;
 	nfds++;
-	fprintf(stderr, "Created listening admin socket %s\n", daemon_adm_sock_path);
+	fprintf(stdout, "Created listening admin socket %s\n", daemon_adm_sock_path);
 	}
 
 void

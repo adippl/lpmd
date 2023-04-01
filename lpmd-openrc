@@ -5,5 +5,6 @@ description="small linux power management daemon"
 command="/usr/bin/lpmd"
 command_args=""
 pidfile="/run/lpmd.pid"
-error_logger="/usr/bin/logger --tag lpmd"
+output_logger="/usr/bin/logger --tag lpmd"
+error_logger="/usr/bin/logger --tag lpmd_err"
 command_background=true
