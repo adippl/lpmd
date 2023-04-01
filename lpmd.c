@@ -444,7 +444,7 @@ daemon_sock_close(){
 		error_errno_msg_exit("couldn't shutdown socket", daemon_sock_path);
 	if( close( fds[D_SOCK].fd ))
 		error_errno_msg_exit("couldn't close socket", daemon_sock_path);
-	fds[D_SOCK].fd=-1;
+	fds[D_SOCK].fd = (-1);
 	if( ! access(daemon_sock_path,F_OK) && unlink(daemon_sock_path) == -1)
 		error_errno_msg_exit("couldn't unlink daemon sock", daemon_sock_path);
 	}
@@ -511,7 +511,7 @@ daemon_adm_sock_close(){
 		error_errno_msg_exit("couldn't shutdown socket", daemon_adm_sock_path);
 	if( close( fds[D_ACPID_SOCK].fd))
 		error_errno_msg_exit("couldn't close socket", daemon_adm_sock_path);
-	fds[D_ACPID_SOCK].fd =- 1;
+	fds[D_ACPID_SOCK].fd = (-1);
 	if( ! access(daemon_adm_sock_path,F_OK) && unlink(daemon_adm_sock_path) == -1)
 		error_errno_msg_exit("couldn't unlink daemon sock", daemon_adm_sock_path);
 	nfds--;}
