@@ -297,7 +297,6 @@ updatePowerPerc(){
 		if( bat[i].exists ){
 			bat[i].cache_bat_perc = get_battery_power(i);}}}
 
-
 void
 checkSysDirs(){
 	int rescan_class_power=0;
@@ -785,18 +784,23 @@ updateChargerState(){
 	/* always check if charger is connected */
 	/* lpmd may miss acpid event if charger was connected while system was suspended */
 	/* TODO detect if system comes out of suspend state??? */
-#ifdef DEBUG
-	fprintf(stderr, "updateChargerState\n");
-#endif
 	int c;
-	if(chargerConnectedPath[0])
+	/* check if system has detected charger status file */
+	if(chargerConnectedPath[0]){
 		c=fileToint(chargerConnectedPath);
-	else{
-		c = true;
-		chargerConnected = true;}
-	if(c != chargerConnected){
-		chargerConnected=c;
-		chargerChangedState();}}
+		if(c != chargerConnected){
+			chargerConnected=c;
+			chargerChangedState();}}}
+
+void
+initial_charger_state_setup(){
+	if( chargerConnectedPath[0] == '\0' ){
+		/* if lpmd didn't detect file with charger state */
+		/*  */
+		chargerConnected = false;
+		/* enable performance modes */
+		setGovernor(GOV_PERFORMANCE);
+		cpu_boost_control(CPU_BOOST_ON);}}
 
 void
 battery_low_suspend(){
@@ -1186,7 +1190,7 @@ checkForLowPower(){
 	char batteries=0;
 	char low=0;
 	char low_warn=0;
-	if( ! chargerConnected  ){
+	if( ! chargerConnected ){
 		for( int i=0; i < BAT_MAX; i++){
 			if( bat[i].exists ){
 				bat[i].low = bat[i].cache_bat_perc < batMinSleepThreshold;
@@ -1194,6 +1198,8 @@ checkForLowPower(){
 				batteries++;
 				low += bat[i].low;
 				low_warn += bat[i].low_warn;}}
+		if( batteries == 0 ) /* skip if system has no batteries */
+			return;
 		if( low == batteries ){
 			battery_low_suspend();
 			return;}
@@ -1219,6 +1225,7 @@ main(){
 	setThresholds_default();
 	//chargerConnected=fileToint(chargerConnectedPath);
 	get_lid_stat_from_sys();
+	initial_charger_state_setup(); /* check if system has charger at all */
 	updateChargerState(); /* detect charger before acpid is connected */
 	reconnect_to_acpid();
 	zero_fds();
