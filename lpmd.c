@@ -804,8 +804,12 @@ initial_charger_state_setup(){
 
 void
 battery_low_suspend(){
-		fprintf(stderr, "BAT0 power low at %d and not charging. Suspending system to mem in %d seconds.\n", (int)get_battery_power(0), suspendDelay);
-		sleep( suspendDelay);
+		fprintf(stderr, "Battery power low and not charging. Suspending system to mem in %d seconds.\n", suspendDelay);
+		sleep( suspendDelay );
+		updateChargerState();
+		if( chargerConnected ){
+			fprintf(stderr, "Charger connected, canceling low power suspend.\n");
+			return;}
 		wall(wallSuspendWarning);
 		suspend();}
 
@@ -840,6 +844,7 @@ void
 sock_print(int fd){
 	int numRead=-1;
 	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		//buf[ BUF_SIZE - 1 ] = '\0'; //just to be sure
 		if( write(STDIN_FILENO, buf, numRead) != numRead) {
 			fprintf(stderr,"partial/failed write");}}}
 
@@ -880,6 +885,7 @@ handle_clients(int i){
 	int numRead=-1;
 	int fd = fds[i].fd;
 	if( (numRead = read(fd, buf, BUF_SIZE)) > 0) {
+		//buf[ BUF_SIZE - 1 ] = '\0'; //just to be sure
 		for( int i=0; i<MSG_MAX_LEN; i++ ){
 			if( buf[i] == '\n' )
 				buf[i] = '\0';}}
@@ -1041,6 +1047,7 @@ handle_read_from_acpid_sock(){
 	char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]={0};
 	char* token=NULL;
 	if((numRead = read(fd_acpid, buf, BUF_SIZE)) > 0){
+		//buf[ BUF_SIZE -1 ] = '\0'; //just to be sure
 		for(int i=0; buf[i]!='\0'; i++){
 			if(buf[i]=='\n')
 				buf[i]='\0';}
@@ -1201,13 +1208,38 @@ checkForLowPower(){
 		if( batteries == 0 ) /* skip if system has no batteries */
 			return;
 		if( low == batteries ){
+#ifdef DEBUG
+			fprintf(stderr, "debug checkForLowPower(): batteries %d low %d low_warn %d chargerConnected %d\n",
+				batteries,
+				low,
+				low_warn,
+				chargerConnected);
+#endif
 			battery_low_suspend();
 			return;}
 		if( low_warn == batteries && ! lowBatWarning_warned ){
 			wall( wallLowBatWarning);
 			lowBatWarning_warned = 1;}}}
-			
 
+void
+debug_dump_batteries(){
+	char batteries=0;
+	char low=0;
+	char low_warn=0;
+	for( int i=0; i < BAT_MAX; i++){
+		if( bat[i].exists ){
+			bat[i].low = bat[i].cache_bat_perc < batMinSleepThreshold;
+			bat[i].low_warn = bat[i].cache_bat_perc < batLowWarningThreshold;
+			batteries++;
+			low += bat[i].low;
+			low_warn += bat[i].low_warn;}}
+	print_time_no_newline();
+	fprintf(stderr, "bat0 %f bat1 %f ", get_battery_power(0), bat[1].cache_bat_perc);
+	fprintf(stderr, "debug debug_dump_batteries(): batteries %d low %d low_warn %d\n",
+		batteries,
+		low,
+		low_warn);}
+	
 
 
 int
@@ -1254,6 +1286,7 @@ main(){
 			else
 				fprintf(stderr, "bat0 %f",bat[0].cache_bat_perc);
 			fprintf(stderr, "\n");
+			debug_dump_batteries();
 #endif
 			if(!acpid_connected)
 				sleep(loopInterval);
