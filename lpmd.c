@@ -143,6 +143,10 @@ void cpu_boost_control(int i);
 void wall(const char* message);
 void send_msg_to_listening_lpmctl(const char* msg);
 void lid_closed_suspend();
+void suspend();
+
+void lid_state_handler();
+int get_lid_stat_from_sys();
 
 void
 action_lid_open(){
@@ -155,6 +159,7 @@ action_lid_close(){
 	send_msg_to_listening_lpmctl( notif_lid_close );
 	lid_closed_suspend();
 	}
+	
 void
 action_charger_connected(){
 	fprintf(stdout, "Charger connected\n");
@@ -167,10 +172,11 @@ action_charger_disconnected(){
 	setGovernor(GOV_POWERSAVE);
 	cpu_boost_control(CPU_BOOST_OFF);
 	lowBatWarning_warned=0;
-	if( suspend_on_lid_close ){
-		lid_closed_suspend();
-		}
-	}
+	
+	if( get_lid_stat_from_sys() == 0 && suspend_on_lid_close ){
+		printf("Charger disconnected, lid closed ");
+		// no \n suspend(); will  print rest of the message
+		suspend();}}
 
 
 void
@@ -329,6 +335,7 @@ get_lid_stat_from_sys(){
 	int i=-1;
 	int f=open(acpi_lid_path, O_RDONLY);
 	char* token=NULL;
+	fprintf(stderr, "WPOKDPWOKAPW\n");
 	if(access(acpi_lid_path, R_OK)){
 		acpi_lid_path_exist=0;
 		fprintf(stderr, "Could not find acpi lid. Disabling lid related functionalities. (missing %s)\n", acpi_lid_path);
@@ -357,10 +364,10 @@ get_lid_stat_from_sys(){
 		if(i!=lid_state){
 			lid_state_changed=1;
 			lid_state=i;}
-	return(0);}
+	return(i);}
 	else{
 		perror(powerState);}
-		return(1);}
+		return(-1);}
 
 void
 chown_custom(const char* path, const char* user, const char* group){
@@ -762,6 +769,9 @@ lid_state_handler(){
 		// falling back to checing via /sys path
 		get_lid_stat_from_sys();}
 		
+#ifdef DEBUG
+	fprintf(stderr, "sc %d, st %d\n", lid_state_changed, lid_state);
+#endif
 	if(lid_state_changed){
 		lid_state_changed=0;
 		if(lid_state==1)
@@ -1019,7 +1029,9 @@ acpi_handle_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 				i=0;}
 			if(i!=lid_state){
 				lid_state_changed=1;}
-				fprintf(stderr, "lid state changed\n");
+#ifdef DEBUG
+			fprintf(stderr, "lid state changed to %d\n", i);
+#endif
 			lid_state=i;}
 		if( !strncmp("battery", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){ 
 			/* handle battery disconnect */
