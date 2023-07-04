@@ -175,7 +175,9 @@ action_charger_disconnected(){
 	
 	if( get_lid_stat_from_sys() == 0 && suspend_on_lid_close ){
 		printf("Charger disconnected, lid closed ");
-		// no \n suspend(); will  print rest of the message
+		// no \n suspend(); should print rest of the message
+		// TODO different msgs sometimes apper between printf and
+		// suspend() printf. buffors responsible.
 		suspend();}}
 
 
@@ -226,7 +228,7 @@ hibernate(){
 
 void
 lid_closed_suspend(){ /* untested; TODO TEST */
-	if( suspend_on_lid_close && !chargerConnected && !lid_state ){
+	if( suspend_on_lid_close && !chargerConnected && get_lid_stat_from_sys()==0 ){
 		fprintf(stderr, "DEBUG lid closed, suspending computer\n");
 		suspend();}}
 
@@ -335,7 +337,6 @@ get_lid_stat_from_sys(){
 	int i=-1;
 	int f=open(acpi_lid_path, O_RDONLY);
 	char* token=NULL;
-	fprintf(stderr, "WPOKDPWOKAPW\n");
 	if(access(acpi_lid_path, R_OK)){
 		acpi_lid_path_exist=0;
 		fprintf(stderr, "Could not find acpi lid. Disabling lid related functionalities. (missing %s)\n", acpi_lid_path);
@@ -1028,10 +1029,10 @@ acpi_handle_events(char acpidEvent[ ACPID_EV_MAX ][ ACPID_STRCMP_MAX_LEN ]){
 			if(!strncmp("close", acpidEvent[2] ,ACPID_STRCMP_MAX_LEN)){
 				i=0;}
 			if(i!=lid_state){
-				lid_state_changed=1;}
 #ifdef DEBUG
-			fprintf(stderr, "lid state changed to %d\n", i);
+				fprintf(stderr, "lid state changed to %d\n", i);
 #endif
+				lid_state_changed=1;}
 			lid_state=i;}
 		if( !strncmp("battery", acpidEvent[0] ,ACPID_STRCMP_MAX_LEN )){ 
 			/* handle battery disconnect */
